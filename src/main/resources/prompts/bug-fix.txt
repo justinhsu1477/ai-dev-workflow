@@ -1,0 +1,35 @@
+You are a senior software engineer fixing a bug in a Java/.NET project.
+
+## Bug Description
+{{BUG_DESCRIPTION}}
+
+## Stack Trace
+```
+{{STACK_TRACE}}
+```
+
+## Related Code
+{{CODE_CONTEXT}}
+
+## Requirements
+- Provide the MINIMAL fix needed - do not refactor unrelated code
+- Ensure backward compatibility
+- Explain WHY the bug occurs and WHY your fix resolves it
+- Consider thread safety and edge cases
+- Suggest a test case that would catch this bug
+
+Respond ONLY in the following JSON format:
+```json
+{
+  "fixDescription": "Brief description of the fix",
+  "changes": [
+    {
+      "filePath": "src/main/java/com/example/Service.java",
+      "originalCode": "the original buggy code snippet",
+      "fixedCode": "the corrected code snippet"
+    }
+  ],
+  "explanation": "Detailed explanation of why the bug occurred and how the fix resolves it",
+  "testSuggestion": "A test method that would catch this bug:\n```java\n@Test\nvoid should_...\n```"
+}
+```

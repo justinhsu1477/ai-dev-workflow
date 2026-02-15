@@ -1,0 +1,51 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ai-dev-workflow
+
+# Claude API Configuration
+claude:
+  api-key: ${CLAUDE_API_KEY:your-api-key-here}
+  model: claude-sonnet-4-5-20250929
+  model-complex: claude-opus-4-6
+  max-tokens: 4096
+  timeout-seconds: 60
+
+# Azure DevOps Configuration
+azure-devops:
+  organization: ${AZURE_DEVOPS_ORG:your-org}
+  project: ${AZURE_DEVOPS_PROJECT:your-project}
+  pat: ${AZURE_DEVOPS_PAT:your-pat-here}
+  base-url: https://dev.azure.com
+
+# Teams Notification
+teams:
+  webhook-url: ${TEAMS_WEBHOOK_URL:}
+
+# Rate Limiting
+rate-limit:
+  claude-api:
+    requests-per-minute: 10
+    requests-per-hour: 100
+
+# Workflow Configuration
+workflow:
+  failure-analysis:
+    enabled: true
+    # Only trigger on these branches (comma-separated)
+    branches: main,develop
+    # Max log lines to send to AI
+    max-log-lines: 500
+  test-generation:
+    enabled: false
+  bug-fix:
+    enabled: false
+
+# Actuator (health check)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

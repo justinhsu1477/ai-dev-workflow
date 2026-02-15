@@ -1,0 +1,39 @@
+# Development environment configuration
+# Usage: java -jar app.jar --spring.profiles.active=dev
+# Or set: SPRING_PROFILES_ACTIVE=dev
+
+server:
+  port: 8080
+
+# In development, you can set these directly or via environment variables
+claude:
+  api-key: ${CLAUDE_API_KEY:your-dev-api-key}
+  model: claude-sonnet-4-5-20250929
+  max-tokens: 4096
+  timeout-seconds: 120
+
+azure-devops:
+  organization: ${AZURE_DEVOPS_ORG:your-org}
+  project: ${AZURE_DEVOPS_PROJECT:your-project}
+  pat: ${AZURE_DEVOPS_PAT:your-dev-pat}
+
+teams:
+  webhook-url: ${TEAMS_WEBHOOK_URL:}
+
+# Relaxed rate limits for development
+rate-limit:
+  claude-api:
+    requests-per-minute: 20
+    requests-per-hour: 200
+
+workflow:
+  failure-analysis:
+    enabled: true
+    branches: main,develop,feature/*
+    max-log-lines: 500
+
+# More detailed logging in dev
+logging:
+  level:
+    com.team.aiworkflow: DEBUG
+    org.springframework.web: DEBUG

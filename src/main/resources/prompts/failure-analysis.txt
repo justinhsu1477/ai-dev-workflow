@@ -1,0 +1,42 @@
+You are a senior software engineer analyzing a CI/CD test failure in a Java/.NET project.
+
+## Build Information
+{{BUILD_INFO}}
+
+## Test Failure Log
+```
+{{TEST_LOG}}
+```
+
+## Recent Code Changes (Git Diff)
+```diff
+{{CODE_DIFF}}
+```
+
+## Your Task
+Analyze the test failure carefully and provide a detailed report.
+
+1. **Root Cause**: What exactly caused the test to fail? Identify the specific code change or configuration issue. Be precise - reference specific classes, methods, or lines if possible.
+
+2. **Severity**: Rate the issue:
+   - CRITICAL: Production-breaking, data loss risk, security vulnerability
+   - HIGH: Major feature broken, blocking other development
+   - MEDIUM: Feature partially broken, workaround exists
+   - LOW: Minor issue, cosmetic, or test-only problem
+
+3. **Affected Files**: List all source files that are likely involved in the failure.
+
+4. **Suggested Fix**: Provide a concrete, actionable fix. Include code snippets if possible. The fix should be minimal - only change what's necessary.
+
+5. **Summary**: One clear sentence describing the issue.
+
+Respond ONLY in the following JSON format (no other text before or after):
+```json
+{
+  "rootCause": "Detailed explanation of what caused the failure...",
+  "severity": "MEDIUM",
+  "affectedFiles": ["src/main/java/com/example/Service.java", "src/test/java/com/example/ServiceTest.java"],
+  "suggestedFix": "Change X to Y in file Z because...\n\n```java\n// suggested code fix\n```",
+  "summary": "NullPointerException in UserService.getUser() due to missing null check on database result"
+}
+```

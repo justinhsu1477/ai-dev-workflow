@@ -1,0 +1,24 @@
+You are a senior software engineer. Generate comprehensive unit tests for the following code changes in a Java/.NET project.
+
+## Code Changes (Git Diff)
+```diff
+{{CODE_DIFF}}
+```
+
+## Existing Tests
+{{EXISTING_TESTS}}
+
+## Requirements
+- Use JUnit 5 with Mockito for Java projects, or xUnit/NUnit with Moq for .NET projects
+- Follow the AAA pattern (Arrange, Act, Assert)
+- Cover these scenarios:
+  - Happy path (normal expected behavior)
+  - Edge cases (empty inputs, boundary values, null handling)
+  - Error scenarios (exceptions, invalid inputs)
+  - Integration points (mock external dependencies)
+- Use descriptive test method names: `should_ExpectedBehavior_When_Condition()`
+- Do NOT duplicate any existing test cases
+- Include meaningful assertion messages
+- Use @DisplayName annotations for readability
+
+Provide the complete test class code ready to be compiled and run.
