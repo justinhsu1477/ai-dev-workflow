@@ -46,10 +46,10 @@ public class E2ETestController {
     public ResponseEntity<Map<String, String>> runTest(@RequestBody E2ETestRequest request) {
         if (!e2eTestingEnabled) {
             return ResponseEntity.ok(Map.of("status", "disabled",
-                    "message", "E2E 測試功能未啟用"));
+                    "message", "AI Test Agent功能未啟用"));
         }
 
-        log.info("收到手動 E2E 測試請求：{}", request.getAppUrl());
+        log.info("收到手動 AI Test Agent請求：{}", request.getAppUrl());
 
         if (request.getAppUrl() == null || request.getAppUrl().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "appUrl 為必填欄位"));
@@ -60,7 +60,7 @@ public class E2ETestController {
 
         return ResponseEntity.ok(Map.of(
                 "status", "accepted",
-                "message", "E2E 測試已啟動：" + request.getAppUrl()));
+                "message", "AI Test Agent已啟動：" + request.getAppUrl()));
     }
 
     /**
@@ -71,12 +71,12 @@ public class E2ETestController {
     public ResponseEntity<E2ETestResult> runTestSync(@RequestBody E2ETestRequest request) {
         if (!e2eTestingEnabled) {
             return ResponseEntity.ok(E2ETestResult.builder()
-                    .summary("E2E 測試功能未啟用")
+                    .summary("AI Test Agent功能未啟用")
                     .status(E2ETestResult.TestRunStatus.ERROR)
                     .build());
         }
 
-        log.info("收到同步 E2E 測試請求：{}", request.getAppUrl());
+        log.info("收到同步 AI Test Agent請求：{}", request.getAppUrl());
         E2ETestResult result = orchestrator.runTest(request);
         return ResponseEntity.ok(result);
     }

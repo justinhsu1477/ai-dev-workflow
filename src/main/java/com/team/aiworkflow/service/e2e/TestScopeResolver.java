@@ -162,7 +162,7 @@ public class TestScopeResolver {
                                           List<ResolvedTestFlow> flows) {
         StringBuilder sb = new StringBuilder();
         sb.append("## 本次測試範圍\n\n");
-        sb.append("根據程式碼變更分析，以下模組受到影響，需要進行 E2E 測試：\n\n");
+        sb.append("根據程式碼變更分析，以下模組受到影響，需要進行 AI Test Agent：\n\n");
 
         for (ModuleDefinition module : modules) {
             sb.append(String.format("### %s (%s)%s\n",
@@ -179,7 +179,7 @@ public class TestScopeResolver {
             sb.append("\n");
         }
 
-        sb.append("請依照上述測試流程的順序和提示，規劃具體的 E2E 測試步驟。\n");
+        sb.append("請依照上述測試流程的順序和提示，規劃具體的 AI Test Agent步驟。\n");
         sb.append("重點驗證：頁面是否正常載入、按鈕是否可點擊、表單是否可提交、資料是否正確顯示。\n");
 
         return sb.toString();

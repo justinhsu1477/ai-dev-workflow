@@ -37,8 +37,8 @@ public class AITestPlanner {
     public List<TestStep> planTestSteps(String appUrl, String appDescription,
                                          String pageContent, int maxSteps) {
         String prompt = String.format("""
-                You are a senior QA engineer planning E2E tests for a web application.
-                Your goal is to find REAL BUGS by actually performing user operations, not just checking if UI elements exist.
+                You are a senior QA engineer planning E2E tests for a Vaadin web application.
+                Your goal is to find REAL BUGS by actually performing user operations and verifying data integrity.
 
                 ## Application Info
                 - URL: %s
@@ -48,48 +48,55 @@ public class AITestPlanner {
                 %s
 
                 ## Your Task
-                Plan a series of test steps that SIMULATE A REAL USER performing the described workflow.
+                Plan test steps that SIMULATE A REAL USER performing the COMPLETE workflow described in the steps-hint.
 
-                CRITICAL RULES:
-                1. You MUST follow the test steps hint provided in the description above. The hint describes the exact user flow to test.
-                2. DO NOT just assert that elements exist. You must actually INTERACT with them (CLICK buttons, TYPE in inputs, SELECT options).
-                3. After performing a write operation (save, submit, create, update, delete), you MUST verify the RESULT:
-                   - Check for success/error notifications (e.g., vaadin-notification, .notification, [role='alert'])
-                   - Verify data actually changed (re-query and compare)
-                   - Check if the saved data appears correctly
-                4. A typical test flow should be:
-                   - Navigate/verify page loaded
-                   - Fill in required fields (TYPE, SELECT)
-                   - Click action button (save/submit/query)
-                   - WAIT for response
-                   - ASSERT the result (success message, data updated, error message if expected)
-                5. If the description mentions "儲存" (save), "送出" (submit), or similar write operations,
-                   you MUST include steps to perform that operation AND verify the outcome.
+                ## CRITICAL RULES (MUST FOLLOW)
 
-                Generate a maximum of %d test steps.
+                1. **Follow the steps-hint EXACTLY**: Each action verb in the hint (NAVIGATE, CLICK, TYPE, WAIT, ASSERT)
+                   MUST become at least one step. Do NOT skip any step from the hint.
 
-                Respond ONLY in this JSON format:
+                2. **CLICK means CLICK, not ASSERT**: When the hint says "CLICK 儲存按鈕", you MUST generate a CLICK action.
+                   Never replace a CLICK with an ASSERT. ASSERT only checks if an element exists — it does NOT click it.
+
+                3. **Handle confirmation dialogs**: Many save/delete operations show a confirmation dialog (e.g., "確定要存檔嗎?").
+                   If the hint mentions "確認對話框", you MUST add a CLICK step for the confirm button.
+                   Even if the hint doesn't mention it, if the app might show a confirm dialog, add a CLICK step.
+                   Typical confirm button selectors: vaadin-button:has-text('確定'), vaadin-button:has-text('確認')
+
+                4. **Verify DATA after write operations**: After save/submit/update, don't just check the notification.
+                   You MUST verify the data was actually persisted:
+                   - ASSERT that the modified field value is still showing the new value (not reverted to old value)
+                   - Example: If you TYPE "5" in a quantity field, after saving, ASSERT that field still shows "5"
+
+                5. **Test flow pattern for write operations**:
+                   TYPE new value → CLICK save → CLICK confirm dialog → ASSERT notification → ASSERT data persisted
+                   Note: If the grid fields are already editable after querying, skip CLICK edit.
+
+                6. **Step budget**: Follow the steps-hint EXACTLY — do NOT add extra steps beyond what the hint specifies.
+                   Do NOT duplicate similar ASSERT steps. Each step must serve a unique purpose.
+
+                ## JSON Format (respond ONLY with this)
                 ```json
                 {
                   "steps": [
-                    {"action": "NAVIGATE", "target": "/path", "description": "Navigate to target page"},
-                    {"action": "ASSERT", "target": "h2:has-text('Title')", "description": "Verify page loaded"},
-                    {"action": "CLICK", "target": "vaadin-button:has-text('查詢')", "description": "Click query button"},
-                    {"action": "WAIT", "target": "vaadin-grid", "description": "Wait for data to load"},
-                    {"action": "CLICK", "target": "vaadin-button:has-text('編輯')", "description": "Click edit to enable editing"},
-                    {"action": "TYPE", "target": "vaadin-integer-field", "value": "10", "description": "Enter order quantity"},
+                    {"action": "NAVIGATE", "target": "/order/d2", "description": "Navigate to order page"},
+                    {"action": "CLICK", "target": "vaadin-button:has-text('查詢')", "description": "Click search button to load data"},
+                    {"action": "TYPE", "target": "vaadin-text-field[data-col='0']", "value": "5", "description": "Enter quantity 5 in first editable field"},
                     {"action": "CLICK", "target": "vaadin-button:has-text('儲存')", "description": "Click save button"},
-                    {"action": "ASSERT", "target": "vaadin-notification", "description": "Verify save result notification appears"}
+                    {"action": "CLICK", "target": "vaadin-button:has-text('確定')", "description": "Click confirm button in save dialog"},
+                    {"action": "ASSERT", "target": "vaadin-notification", "description": "Verify save notification appeared"},
+                    {"action": "ASSERT", "target": "vaadin-text-field[data-col='0']", "description": "Verify quantity field still shows the saved value (data persisted)"}
                   ]
                 }
                 ```
 
-                Rules for selectors (Vaadin web components):
-                - Prefer: text content based (vaadin-button:has-text('儲存'), :has-text('查詢'))
-                - Then: semantic selectors (vaadin-text-field, vaadin-grid, vaadin-combo-box)
-                - Then: id selectors (#btn-add), data-testid, name attributes
-                - Avoid: fragile class-only selectors or nth-child
-                - For Vaadin apps: use vaadin-* tag names (vaadin-button, vaadin-text-field, vaadin-grid, etc.)
+                ## Selector Rules (Vaadin)
+                - Prefer text: vaadin-button:has-text('儲存'), :has-text('查詢')
+                - Vaadin tags: vaadin-button, vaadin-text-field, vaadin-integer-field, vaadin-grid, vaadin-combo-box
+                - Grid editable fields: [data-row][data-col]:not([readonly]), vaadin-text-field[data-col='0']
+                - Confirm dialogs: vaadin-confirm-dialog vaadin-button, vaadin-dialog-overlay vaadin-button:has-text('確定')
+                - Notifications: vaadin-notification, vaadin-notification-card
+                - Avoid: fragile class-only or nth-child selectors
                 """,
                 appUrl, appDescription, pageContent, maxSteps);
 

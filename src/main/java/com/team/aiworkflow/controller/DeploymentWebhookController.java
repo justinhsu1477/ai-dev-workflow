@@ -53,7 +53,7 @@ public class DeploymentWebhookController {
         }
 
         if (defaultStagingUrl == null || defaultStagingUrl.isBlank()) {
-            log.warn("E2E 測試已啟用，但未設定 staging URL");
+            log.warn("AI Test Agent已啟用，但未設定 staging URL");
             return ResponseEntity.ok(Map.of("status", "error",
                     "message", "staging-url 未設定"));
         }
@@ -75,7 +75,7 @@ public class DeploymentWebhookController {
 
         return ResponseEntity.ok(Map.of(
                 "status", "accepted",
-                "message", "E2E 測試已觸發：" + defaultStagingUrl));
+                "message", "AI Test Agent已觸發：" + defaultStagingUrl));
     }
 
     /**

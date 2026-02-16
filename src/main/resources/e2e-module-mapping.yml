@@ -74,7 +74,7 @@ e2e-mapping:
           description: "驗證業務員可以進入訂貨頁面、查看商品、填寫訂貨數量、送出訂單"
           route: "/order/d2"
           priority: 1
-          steps-hint: "導航到 /order/d2 → 確認頁面載入 → 查看訂貨表格 → 嘗試輸入數量 → 點擊儲存"
+          steps-hint: "NAVIGATE /order/d2 → CLICK 查詢按鈕(文字為'查詢') → TYPE 在WEB訂貨數量欄位輸入數字 → CLICK 儲存按鈕(文字為'儲存') → CLICK 確認對話框的確定按鈕(文字為'確定') → ASSERT 驗證vaadin-notification出現 → ASSERT 驗證WEB訂貨數量欄位值仍保持輸入的數字(資料持久化驗證)"
           # flow 層級精準匹配：只有改到 d2 相關檔案才跑這個 flow
           file-patterns:
             - "**/views/order/d2/**"

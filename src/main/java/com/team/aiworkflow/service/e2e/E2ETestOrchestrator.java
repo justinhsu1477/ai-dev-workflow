@@ -14,9 +14,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.team.aiworkflow.service.claude.ClaudeApiService;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -41,6 +46,8 @@ public class E2ETestOrchestrator {
     private final AITestPlanner aiTestPlanner;
     private final WorkItemService workItemService;
     private final TeamsNotificationService teamsNotificationService;
+    private final ClaudeApiService claudeApiService;
+    private final ObjectMapper objectMapper;
 
     // ========== 精準範圍模式（Push 觸發） ==========
 
@@ -50,10 +57,10 @@ public class E2ETestOrchestrator {
      */
     @Async("aiTaskExecutor")
     public void runScopedTestAsync(E2ETestRequest request, TestScope scope) {
-        log.info("啟動精準範圍 E2E 測試：{} 個模組，{} 個測試流程",
+        log.info("啟動精準範圍 AI Test Agent：{} 個模組，{} 個測試流程",
                 scope.getAffectedModuleIds().size(), scope.getTotalFlows());
         E2ETestResult result = runScopedTest(request, scope);
-        log.info("精準範圍 E2E 測試完成：{} - 發現 {} 個 bug",
+        log.info("精準範圍 AI Test Agent完成：{} - 發現 {} 個 bug",
                 result.getStatus(), result.getBugsFound().size());
     }
 
@@ -63,7 +70,7 @@ public class E2ETestOrchestrator {
      */
     public E2ETestResult runScopedTest(E2ETestRequest request, TestScope scope) {
         String testRunId = UUID.randomUUID().toString().substring(0, 8);
-        log.info("精準 E2E 測試 [{}] 開始：{} | 範圍：{}",
+        log.info("精準 AI Test Agent [{}] 開始：{} | 範圍：{}",
                 testRunId, request.getAppUrl(), scope.getAffectedModuleNames());
 
         E2ETestResult result = E2ETestResult.builder()
@@ -122,7 +129,7 @@ public class E2ETestOrchestrator {
                 String flowContext = buildFlowContext(testFlow, scope.getScopeDescription());
                 List<TestStep> flowSteps = aiTestPlanner.planTestSteps(
                         fullUrl, flowContext, pageContent,
-                        Math.min(10, request.getMaxSteps()));
+                        Math.min(15, request.getMaxSteps()));
 
                 if (flowSteps.isEmpty()) {
                     log.warn("[{}] AI 未為流程 '{}' 產生測試步驟", testRunId, testFlow.getFlowName());
@@ -131,6 +138,8 @@ public class E2ETestOrchestrator {
 
                 log.info("[{}] 流程 '{}' 規劃了 {} 個步驟",
                         testRunId, testFlow.getFlowName(), flowSteps.size());
+
+                List<TestStep> failedStepsInFlow = new ArrayList<>();
 
                 for (TestStep step : flowSteps) {
                     if (System.currentTimeMillis() > deadline) {
@@ -154,8 +163,13 @@ public class E2ETestOrchestrator {
                         executedStep.setScreenshotData(null);
                     } else if (executedStep.getStatus() == TestStep.StepStatus.FAILED) {
                         failedCount++;
-                        recordBug(result, executedStep, page, testFlow, testRunId);
+                        failedStepsInFlow.add(executedStep);
                     }
+                }
+
+                // 流程結束後，將該流程所有失敗步驟整合為一個 bug（用 AI 歸納）
+                if (!failedStepsInFlow.isEmpty()) {
+                    recordConsolidatedBug(result, failedStepsInFlow, flowSteps, page, testFlow, testRunId);
                 }
 
                 if (result.getStatus() == E2ETestResult.TestRunStatus.TIMEOUT) break;
@@ -175,7 +189,7 @@ public class E2ETestOrchestrator {
             }
 
             result.setSummary(String.format(
-                    "精準 E2E 測試（%s）：%d/%d 步驟通過，測試 %d 個流程，發現 %d 個 bug | 受影響模組：%s",
+                    "精準 AI Test Agent（%s）：%d/%d 步驟通過，測試 %d 個流程，發現 %d 個 bug | 受影響模組：%s",
                     scope.getTriggerType(),
                     passedCount, globalStepCounter,
                     scope.getTotalFlows(),
@@ -183,7 +197,7 @@ public class E2ETestOrchestrator {
                     String.join(", ", scope.getAffectedModuleNames())));
 
         } catch (Exception e) {
-            log.error("[{}] 精準 E2E 測試執行失敗：{}", testRunId, e.getMessage(), e);
+            log.error("[{}] 精準 AI Test Agent執行失敗：{}", testRunId, e.getMessage(), e);
             result.setStatus(E2ETestResult.TestRunStatus.ERROR);
             result.setSummary("測試執行錯誤：" + e.getMessage());
         } finally {
@@ -199,7 +213,7 @@ public class E2ETestOrchestrator {
         createWorkItemsForBugs(result);
         notifyTeam(result);
 
-        log.info("[{}] 精準 E2E 測試完成，耗時 {}ms：{}",
+        log.info("[{}] 精準 AI Test Agent完成，耗時 {}ms：{}",
                 testRunId, result.getTotalDurationMs(), result.getSummary());
 
         return result;
@@ -213,9 +227,9 @@ public class E2ETestOrchestrator {
      */
     @Async("aiTaskExecutor")
     public void runTestAsync(E2ETestRequest request) {
-        log.info("啟動非同步 E2E 測試：{}", request.getAppUrl());
+        log.info("啟動非同步 AI Test Agent：{}", request.getAppUrl());
         E2ETestResult result = runTest(request);
-        log.info("E2E 測試完成：{} - 發現 {} 個 bug",
+        log.info("AI Test Agent完成：{} - 發現 {} 個 bug",
                 result.getStatus(), result.getBugsFound().size());
     }
 
@@ -224,7 +238,7 @@ public class E2ETestOrchestrator {
      */
     public E2ETestResult runTest(E2ETestRequest request) {
         String testRunId = UUID.randomUUID().toString().substring(0, 8);
-        log.info("E2E 測試 [{}] 開始：{}", testRunId, request.getAppUrl());
+        log.info("AI Test Agent [{}] 開始：{}", testRunId, request.getAppUrl());
 
         E2ETestResult result = E2ETestResult.builder()
                 .testRunId(testRunId)
@@ -328,11 +342,11 @@ public class E2ETestOrchestrator {
             }
 
             result.setSummary(String.format(
-                    "E2E 測試：%d/%d 步驟通過，發現 %d 個 bug",
+                    "AI Test Agent：%d/%d 步驟通過，發現 %d 個 bug",
                     passedCount, plannedSteps.size(), result.getBugsFound().size()));
 
         } catch (Exception e) {
-            log.error("[{}] E2E 測試執行失敗：{}", testRunId, e.getMessage(), e);
+            log.error("[{}] AI Test Agent執行失敗：{}", testRunId, e.getMessage(), e);
             result.setStatus(E2ETestResult.TestRunStatus.ERROR);
             result.setSummary("測試執行錯誤：" + e.getMessage());
         } finally {
@@ -347,7 +361,7 @@ public class E2ETestOrchestrator {
         createWorkItemsForBugs(result);
         notifyTeam(result);
 
-        log.info("[{}] E2E 測試完成，耗時 {}ms：{}",
+        log.info("[{}] AI Test Agent完成，耗時 {}ms：{}",
                 testRunId, result.getTotalDurationMs(), result.getSummary());
 
         return result;
@@ -449,36 +463,165 @@ public class E2ETestOrchestrator {
     }
 
     /**
-     * 記錄測試中發現的 bug（精準模式用）。
+     * 將同一流程中的所有失敗步驟整合為一個 bug。
+     * 用 AI 分析多個失敗步驟，歸納出根本原因，產生統一的 bug 描述。
+     * 只建立一個 Work Item，而非每個失敗步驟各一個。
      */
-    private void recordBug(E2ETestResult result, TestStep executedStep,
-                            Page page, ResolvedTestFlow flow, String testRunId) {
+    private void recordConsolidatedBug(E2ETestResult result, List<TestStep> failedSteps,
+                                         List<TestStep> allSteps, Page page,
+                                         ResolvedTestFlow flow, String testRunId) {
         String consoleErrors = playwrightService.getConsoleErrors(page);
         String currentUrl = playwrightService.getCurrentUrl(page);
 
+        // 組裝所有步驟的執行摘要（給 AI 分析用）
+        StringBuilder allStepsSummary = new StringBuilder();
+        for (TestStep step : allSteps) {
+            String status = step.getStatus() == TestStep.StepStatus.PASSED ? "✅" : "❌";
+            allStepsSummary.append(String.format("步驟 %d [%s] %s: %s - %s\n",
+                    step.getStepNumber(), status, step.getAction(),
+                    step.getDescription(),
+                    step.getErrorMessage() != null ? "錯誤: " + step.getErrorMessage() : "成功"));
+        }
+
+        // 組裝失敗步驟的詳細資訊
+        StringBuilder failedDetails = new StringBuilder();
+        for (TestStep step : failedSteps) {
+            failedDetails.append(String.format("- 步驟 %d [%s]: %s\n  目標: %s\n  錯誤: %s\n",
+                    step.getStepNumber(), step.getAction(), step.getDescription(),
+                    step.getTarget(), step.getErrorMessage()));
+        }
+
+        // 用 AI 歸納失敗原因（結構化 JSON）
+        BugAnalysis analysis = analyzeBugWithAI(flow, allStepsSummary.toString(), failedDetails.toString());
+
+        // 取第一個失敗步驟的截圖
+        byte[] screenshot = failedSteps.stream()
+                .filter(s -> s.getScreenshotData() != null && s.getScreenshotData().length > 0)
+                .findFirst()
+                .map(TestStep::getScreenshotData)
+                .orElse(null);
+
+        // 決定嚴重程度
+        String severity = failedSteps.stream()
+                .map(this::determineSeverity)
+                .reduce((a, b) -> "HIGH".equals(a) ? a : b)
+                .orElse("MEDIUM");
+
+        // 組合完整描述：人看的摘要 + 技術描述（給 AI 修 code 用）
+        String fullDescription = String.format(
+                "【問題摘要】\n%s\n\n【使用者影響】\n%s\n\n【技術描述】\n%s\n\n【建議修復方向】\n%s",
+                analysis.summary, analysis.impact, analysis.technicalDetail, analysis.suggestedFix);
+
         E2ETestResult.BugFound bug = E2ETestResult.BugFound.builder()
-                .title(String.format("[E2E][%s] %s", flow.getModuleName(), executedStep.getDescription()))
-                .description(String.format(
-                        "模組：%s\n流程：%s\n步驟 %d 失敗：%s\n操作：%s 目標 '%s'\n錯誤：%s",
-                        flow.getModuleName(),
-                        flow.getFlowName(),
-                        executedStep.getStepNumber(),
-                        executedStep.getDescription(),
-                        executedStep.getAction(),
-                        executedStep.getTarget(),
-                        executedStep.getErrorMessage()))
-                .severity(determineSeverity(executedStep))
-                .stepNumber(executedStep.getStepNumber())
-                .screenshotData(executedStep.getScreenshotData())
+                .title(String.format("[AI Test Agent] %s", analysis.title))
+                .description(fullDescription)
+                .severity(severity)
+                .stepNumber(failedSteps.get(0).getStepNumber())
+                .screenshotData(screenshot)
                 .pageUrl(currentUrl)
                 .consoleErrors(consoleErrors)
-                .expectedBehavior(executedStep.getDescription())
-                .actualBehavior(executedStep.getErrorMessage())
+                .expectedBehavior(analysis.summary)
+                .actualBehavior(analysis.technicalDetail)
                 .build();
 
         result.getBugsFound().add(bug);
-        log.warn("[{}] 在流程 '{}' 步驟 {} 發現 bug：{}",
-                testRunId, flow.getFlowName(), executedStep.getStepNumber(), bug.getTitle());
+        log.warn("[{}] 流程 '{}' 發現 {} 個失敗步驟，已整合為 1 個 bug：{}",
+                testRunId, flow.getFlowName(), failedSteps.size(), bug.getTitle());
+    }
+
+    /**
+     * AI bug 分析結果的結構化容器。
+     */
+    private record BugAnalysis(String title, String summary, String technicalDetail,
+                                String impact, String suggestedFix) {}
+
+    /**
+     * 用 AI 分析多個失敗步驟，歸納出結構化的 bug 描述。
+     * 產出兩段式內容：人看得懂的摘要 + 可直接餵給 AI 修 code 的技術描述。
+     */
+    private BugAnalysis analyzeBugWithAI(ResolvedTestFlow flow,
+                                           String allStepsSummary, String failedDetails) {
+        String prompt = String.format("""
+                你是一位資深 QA 工程師，正在分析自動化 E2E 測試的失敗結果。
+                請歸納所有失敗步驟，判斷它們是否屬於同一個 bug，並產出結構化的 bug 報告。
+
+                ## 測試流程
+                模組：%s
+                流程：%s
+                說明：%s
+                路由：%s
+
+                ## 所有步驟執行結果
+                %s
+
+                ## 失敗步驟詳情
+                %s
+
+                ## 輸出要求
+
+                請用以下 JSON 格式回答（不要加 markdown code block）：
+
+                {
+                  "title": "簡短的 bug 標題，不超過 30 字，用白話文描述問題核心，例如「D+2 訂貨儲存後數量未保留」",
+                  "summary": "給非技術人員看的問題描述（2-3 句話）。用一般使用者能理解的語言描述：在什麼頁面、做了什麼操作、預期什麼結果、實際發生什麼問題。不要出現任何 CSS selector、HTML tag、timeout 等技術術語。",
+                  "technicalDetail": "給開發人員和 AI 的技術描述。包含：(1) 問題發生的路由和頁面元件 (2) 完整的操作流程和每步結果 (3) 預期行為 vs 實際行為的具體差異 (4) 可能涉及的程式碼位置（根據路由和元件名稱推測）",
+                  "impact": "這個 bug 對使用者的業務影響是什麼（1-2 句話）",
+                  "suggestedFix": "開發人員應該從哪裡開始檢查、可能的修復方向（根據路由和功能推測可能的 Service/Component）"
+                }
+                """,
+                flow.getModuleName(), flow.getFlowName(), flow.getDescription(), flow.getRoute(),
+                allStepsSummary, failedDetails);
+
+        try {
+            String response = claudeApiService.analyze(prompt).block();
+            if (response != null) {
+                return parseBugAnalysis(response, flow);
+            }
+        } catch (Exception e) {
+            log.warn("AI bug 分析失敗：{}", e.getMessage());
+        }
+
+        // fallback：AI 分析失敗時用預設描述
+        return new BugAnalysis(
+                flow.getFlowName() + " 測試失敗",
+                String.format("「%s」功能的自動化測試未通過，請開發人員檢查。", flow.getFlowName()),
+                failedDetails,
+                "功能可能異常，影響使用者操作。",
+                String.format("請檢查路由 %s 對應的程式碼。", flow.getRoute()));
+    }
+
+    /**
+     * 解析 AI 回傳的 bug 分析 JSON。
+     */
+    private BugAnalysis parseBugAnalysis(String response, ResolvedTestFlow flow) {
+        try {
+            // 嘗試從回應中提取 JSON
+            String json = response;
+            int braceStart = response.indexOf('{');
+            int braceEnd = response.lastIndexOf('}');
+            if (braceStart >= 0 && braceEnd > braceStart) {
+                json = response.substring(braceStart, braceEnd + 1);
+            }
+
+            Map<String, String> parsed = objectMapper.readValue(json, new TypeReference<>() {});
+
+            return new BugAnalysis(
+                    parsed.getOrDefault("title", flow.getFlowName() + " 測試失敗"),
+                    parsed.getOrDefault("summary", "自動化測試未通過"),
+                    parsed.getOrDefault("technicalDetail", "無技術描述"),
+                    parsed.getOrDefault("impact", "功能可能異常"),
+                    parsed.getOrDefault("suggestedFix", "請檢查相關程式碼"));
+
+        } catch (Exception e) {
+            log.warn("解析 AI bug 分析 JSON 失敗，使用原始回應：{}", e.getMessage());
+            // JSON 解析失敗，把整段回應當 summary 用
+            return new BugAnalysis(
+                    flow.getFlowName() + " 測試失敗",
+                    response.length() > 200 ? response.substring(0, 200) + "..." : response,
+                    response,
+                    "功能可能異常，影響使用者操作。",
+                    String.format("請檢查路由 %s 對應的程式碼。", flow.getRoute()));
+        }
     }
 
     /**
@@ -496,8 +639,8 @@ public class E2ETestOrchestrator {
                         com.team.aiworkflow.model.AnalysisResult.builder()
                                 .buildNumber(result.getBuildNumber())
                                 .branch(result.getBranch())
-                                .rootCause(bug.getDescription())
-                                .suggestedFix("調查失敗的 E2E 步驟：" + bug.getExpectedBehavior())
+                                .rootCause(bug.getExpectedBehavior())   // 人看的摘要
+                                .suggestedFix(bug.getActualBehavior())  // 技術描述（給 AI 修 code）
                                 .severity(mapSeverity(bug.getSeverity()))
                                 .summary(bug.getTitle())
                                 .build();
@@ -524,7 +667,7 @@ public class E2ETestOrchestrator {
                                 // 步驟 3：關聯附件到 Work Item
                                 workItemService.attachToWorkItem(
                                         workItemId, attachmentUrl,
-                                        String.format("E2E 測試截圖 - 步驟 %d", bug.getStepNumber())
+                                        String.format("AI Test Agent截圖 - 步驟 %d", bug.getStepNumber())
                                 ).block();
 
                                 bug.setAttachmentUrl(attachmentUrl);
@@ -555,6 +698,7 @@ public class E2ETestOrchestrator {
 
     /**
      * 組裝 E2E 測試的 ReproSteps HTML，嵌入測試詳細資訊和截圖。
+     * 分為「問題摘要」（PM/主管看）和「技術描述」（開發人員/AI 修 code 用）兩部分。
      * 這段 HTML 會顯示在 Azure DevOps Work Item 的「重現步驟」區塊中。
      */
     private String buildE2EReproSteps(E2ETestResult.BugFound bug,
@@ -562,8 +706,21 @@ public class E2ETestOrchestrator {
                                        String attachmentUrl) {
         StringBuilder sb = new StringBuilder();
 
-        // 測試資訊摘要
-        sb.append("<h3>E2E 測試資訊</h3>");
+        // === 第一部分：問題摘要（非技術人員也能看懂）===
+        sb.append("<h2>問題摘要</h2>");
+        sb.append(String.format("<p>%s</p>",
+                bug.getExpectedBehavior() != null ? bug.getExpectedBehavior() : "自動化測試發現問題"));
+
+        // 截圖放在最前面，讓人一眼看到問題
+        if (attachmentUrl != null) {
+            sb.append("<h3>問題截圖</h3>");
+            sb.append(String.format("<p><img src=\"%s\" alt=\"AI Test Agent 截圖\" "
+                            + "style=\"max-width:100%%; border:1px solid #ccc;\"></p>",
+                    attachmentUrl));
+        }
+
+        // === 第二部分：測試資訊 ===
+        sb.append("<h2>測試資訊</h2>");
         sb.append("<table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse'>");
         sb.append(String.format("<tr><td><strong>測試執行 ID</strong></td><td>%s</td></tr>",
                 result.getTestRunId() != null ? result.getTestRunId() : "N/A"));
@@ -575,38 +732,36 @@ public class E2ETestOrchestrator {
                 result.getAppUrl() != null ? result.getAppUrl() : "N/A"));
         sb.append(String.format("<tr><td><strong>嚴重程度</strong></td><td>%s</td></tr>",
                 bug.getSeverity()));
-        sb.append(String.format("<tr><td><strong>失敗步驟</strong></td><td>第 %d 步</td></tr>",
-                bug.getStepNumber()));
         sb.append(String.format("<tr><td><strong>頁面 URL</strong></td><td>%s</td></tr>",
                 bug.getPageUrl() != null ? bug.getPageUrl() : "N/A"));
         sb.append("</table>");
 
-        // 重現步驟
-        sb.append("<h3>重現步驟</h3>");
-        sb.append("<ol>");
-        sb.append(String.format("<li>開啟測試環境：%s</li>",
-                result.getAppUrl() != null ? result.getAppUrl() : "N/A"));
-        sb.append("<li>使用測試帳號登入系統</li>");
-        sb.append(String.format("<li>導航至發生問題的頁面：%s</li>",
-                bug.getPageUrl() != null ? bug.getPageUrl() : "N/A"));
-        sb.append(String.format("<li>執行操作：%s</li>",
-                bug.getExpectedBehavior() != null ? bug.getExpectedBehavior() : "N/A"));
-        sb.append(String.format("<li><strong>結果：步驟失敗</strong> — %s</li>",
-                bug.getActualBehavior() != null ? bug.getActualBehavior() : "未知錯誤"));
-        sb.append("</ol>");
+        // === 第三部分：操作流程（從 description 欄位解析出步驟） ===
+        sb.append("<h2>操作流程</h2>");
+        if (bug.getDescription() != null) {
+            // description 格式為「【問題摘要】\n...\n\n【技術描述】\n...」
+            // 提取各段落並以區塊呈現
+            String desc = bug.getDescription();
+            String[] sections = desc.split("【");
+            for (String section : sections) {
+                if (section.isBlank()) continue;
+                int headerEnd = section.indexOf("】");
+                if (headerEnd > 0) {
+                    String header = section.substring(0, headerEnd);
+                    String content = section.substring(headerEnd + 1).trim();
+                    sb.append(String.format("<h3>%s</h3>", header));
+                    // 將換行轉為 <br>
+                    sb.append(String.format("<p>%s</p>", content.replace("\n", "<br>")));
+                } else {
+                    sb.append(String.format("<p>%s</p>", section.replace("\n", "<br>")));
+                }
+            }
+        }
 
-        // 預期 vs 實際行為
-        sb.append("<h3>預期行為</h3>");
-        sb.append(String.format("<p>%s</p>",
-                bug.getExpectedBehavior() != null ? bug.getExpectedBehavior() : "N/A"));
-        sb.append("<h3>實際行為</h3>");
-        sb.append(String.format("<p>%s</p>",
-                bug.getActualBehavior() != null ? bug.getActualBehavior() : "N/A"));
-
-        // 詳細錯誤描述
-        sb.append("<h3>錯誤詳情</h3>");
+        // === 第四部分：技術描述（給開發人員和 AI 修 code 用）===
+        sb.append("<h2>技術描述（供開發人員參考）</h2>");
         sb.append(String.format("<pre>%s</pre>",
-                bug.getDescription() != null ? bug.getDescription() : "N/A"));
+                bug.getActualBehavior() != null ? bug.getActualBehavior() : "N/A"));
 
         // Console 錯誤
         if (bug.getConsoleErrors() != null && !bug.getConsoleErrors().isBlank()) {
@@ -614,23 +769,16 @@ public class E2ETestOrchestrator {
             sb.append(String.format("<pre>%s</pre>", bug.getConsoleErrors()));
         }
 
-        // 截圖
-        if (attachmentUrl != null) {
-            sb.append("<h3>失敗時的畫面截圖</h3>");
-            sb.append(String.format("<p><img src=\"%s\" alt=\"E2E 測試截圖 - 步驟 %d\" "
-                            + "style=\"max-width:100%%; border:1px solid #ccc;\"></p>",
-                    attachmentUrl, bug.getStepNumber()));
-        }
-
         // 自動產生標註
         sb.append("<hr>");
-        sb.append("<p><em>此 Work Item 由 AI Dev Workflow E2E 測試自動建立。</em></p>");
+        sb.append("<p><em>此 Work Item 由 AI Dev Workflow AI Test Agent 自動建立。</em></p>");
 
         return sb.toString();
     }
 
     /**
      * 透過 Teams 通知團隊測試結果。
+     * 包含每個 bug 的簡短摘要，讓團隊成員在 Teams 就能看到問題概況。
      */
     private void notifyTeam(E2ETestResult result) {
         String emoji = switch (result.getStatus()) {
@@ -640,16 +788,33 @@ public class E2ETestOrchestrator {
             default -> "⚠️";
         };
 
-        String message = String.format(
-                "%s **E2E 測試報告** - Build #%s\n\n%s\n\n步驟：%d/%d 通過 | 發現 bug：%d 個",
+        StringBuilder message = new StringBuilder();
+        message.append(String.format(
+                "%s **AI Test Agent 報告** - Build #%s\n\n",
                 emoji,
-                result.getBuildNumber() != null ? result.getBuildNumber() : "手動觸發",
-                result.getSummary(),
-                result.getPassedSteps(),
-                result.getTotalSteps(),
-                result.getBugsFound().size());
+                result.getBuildNumber() != null ? result.getBuildNumber() : "手動觸發"));
 
-        teamsNotificationService.sendSimpleMessage(message).subscribe();
+        message.append(String.format("步驟：%d/%d 通過 | 發現 bug：%d 個\n",
+                result.getPassedSteps(), result.getTotalSteps(),
+                result.getBugsFound().size()));
+
+        // 列出每個 bug 的標題和摘要
+        if (!result.getBugsFound().isEmpty()) {
+            message.append("\n---\n");
+            for (int i = 0; i < result.getBugsFound().size(); i++) {
+                E2ETestResult.BugFound bug = result.getBugsFound().get(i);
+                message.append(String.format("\n**Bug %d：%s**\n", i + 1, bug.getTitle()));
+                // expectedBehavior 存的是 AI 產出的人看摘要
+                if (bug.getExpectedBehavior() != null && !bug.getExpectedBehavior().isBlank()) {
+                    message.append(bug.getExpectedBehavior()).append("\n");
+                }
+                if (bug.getWorkItemId() > 0) {
+                    message.append(String.format("Work Item: #%d\n", bug.getWorkItemId()));
+                }
+            }
+        }
+
+        teamsNotificationService.sendSimpleMessage(message.toString()).subscribe();
     }
 
     /**

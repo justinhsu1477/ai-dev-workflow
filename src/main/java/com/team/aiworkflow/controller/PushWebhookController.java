@@ -76,11 +76,11 @@ public class PushWebhookController {
 
         if (!e2eTestingEnabled) {
             return ResponseEntity.ok(Map.of("status", "disabled",
-                    "message", "E2E 測試功能未啟用"));
+                    "message", "AI Test Agent功能未啟用"));
         }
 
         if (stagingUrl == null || stagingUrl.isBlank()) {
-            log.warn("E2E 測試已啟用，但未設定 staging URL");
+            log.warn("AI Test Agent已啟用，但未設定 staging URL");
             return ResponseEntity.ok(Map.of("status", "error",
                     "message", "staging-url 未設定"));
         }
@@ -136,7 +136,7 @@ public class PushWebhookController {
 
         return ResponseEntity.ok(Map.of(
                 "status", "accepted",
-                "message", String.format("E2E 測試已觸發（%s）：%s",
+                "message", String.format("AI Test Agent已觸發（%s）：%s",
                         scope.getTriggerType(), stagingUrl),
                 "affectedModules", new ArrayList<>(affectedModules),
                 "testFlowCount", scope.getTotalFlows(),
@@ -165,7 +165,7 @@ public class PushWebhookController {
 
         if (!e2eTestingEnabled) {
             return ResponseEntity.ok(Map.of("status", "disabled",
-                    "message", "E2E 測試功能未啟用"));
+                    "message", "AI Test Agent功能未啟用"));
         }
 
         if (stagingUrl == null || stagingUrl.isBlank()) {
@@ -196,7 +196,7 @@ public class PushWebhookController {
 
         return ResponseEntity.ok(Map.of(
                 "status", "accepted",
-                "message", String.format("精準 E2E 測試已觸發：%d 個模組，%d 個測試流程",
+                "message", String.format("精準 AI Test Agent已觸發：%d 個模組，%d 個測試流程",
                         affectedModules.size(), scope.getTotalFlows()),
                 "affectedModules", new ArrayList<>(affectedModules),
                 "testFlows", scope.getTestFlows().stream()
