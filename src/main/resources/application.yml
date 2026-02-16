@@ -38,6 +38,18 @@ workflow:
     branches: main,develop
     # Max log lines to send to AI
     max-log-lines: 500
+  e2e-testing:
+    enabled: false
+    # URL of the staging/dev environment to test
+    staging-url: ${E2E_STAGING_URL:}
+    # Description of the application (helps AI plan tests)
+    app-description: ${E2E_APP_DESCRIPTION:}
+    # Max test steps per run
+    max-steps: 30
+    # Timeout for entire test run (seconds)
+    timeout-seconds: 300
+    # Take screenshot after each step
+    screenshot-each-step: true
   test-generation:
     enabled: false
   bug-fix:

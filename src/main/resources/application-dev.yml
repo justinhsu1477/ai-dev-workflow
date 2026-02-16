@@ -31,6 +31,12 @@ workflow:
     enabled: true
     branches: main,develop,feature/*
     max-log-lines: 500
+  e2e-testing:
+    enabled: true
+    staging-url: ${E2E_STAGING_URL:http://localhost:3000}
+    app-description: ${E2E_APP_DESCRIPTION:Web application under development}
+    max-steps: 20
+    timeout-seconds: 180
 
 # More detailed logging in dev
 logging:

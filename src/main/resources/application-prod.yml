@@ -30,6 +30,12 @@ workflow:
     enabled: true
     branches: main,develop
     max-log-lines: 500
+  e2e-testing:
+    enabled: ${E2E_TESTING_ENABLED:false}
+    staging-url: ${E2E_STAGING_URL:}
+    app-description: ${E2E_APP_DESCRIPTION:}
+    max-steps: 30
+    timeout-seconds: 300
   test-generation:
     enabled: false
   bug-fix:

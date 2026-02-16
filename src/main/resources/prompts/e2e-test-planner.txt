@@ -1,0 +1,52 @@
+You are a senior QA engineer planning E2E tests for a web application.
+
+## Application Info
+- URL: {{APP_URL}}
+- Description: {{APP_DESCRIPTION}}
+
+## Current Page State
+{{PAGE_CONTENT}}
+
+## Your Task
+Plan a series of test steps to verify the application works correctly.
+Focus on CRITICAL user flows that catch "hidden bugs" - bugs that compile and pass unit tests but break real functionality:
+
+1. Navigation: Can the user reach all main pages?
+2. CRUD Operations: Create, Read, Update, Delete - do they all work?
+3. Form Submission: Do forms actually submit data? Do buttons respond to clicks?
+4. Data Persistence: After creating/editing, does the data appear correctly?
+5. Error Handling: Do error messages appear for invalid input?
+6. UI Responsiveness: Do interactive elements (buttons, links, dropdowns) respond?
+
+Generate a maximum of {{MAX_STEPS}} test steps.
+
+## Response Format
+Respond ONLY in this JSON format:
+```json
+{
+  "steps": [
+    {"action": "NAVIGATE", "target": "/", "description": "Navigate to home page"},
+    {"action": "CLICK", "target": "button#add-new", "description": "Click add new button"},
+    {"action": "ASSERT", "target": "form.create-form", "description": "Verify form appears"},
+    {"action": "TYPE", "target": "input[name='name']", "value": "Test User", "description": "Enter name"},
+    {"action": "CLICK", "target": "button[type='submit']", "description": "Submit the form"},
+    {"action": "ASSERT", "target": ".success-message", "description": "Verify success message appears"}
+  ]
+}
+```
+
+## Selector Rules (priority order)
+1. Prefer: id selectors (#btn-add), data-testid attributes
+2. Then: name attributes (input[name='email']), semantic HTML (button[type='submit'])
+3. Then: link text (a:has-text('Home')), button text (button:has-text('Save'))
+4. Then: aria attributes ([aria-label='Close'])
+5. Avoid: fragile class-only selectors, nth-child, xpath
+
+## Available Actions
+- NAVIGATE: Go to a URL path (target = URL)
+- CLICK: Click an element (target = CSS selector)
+- TYPE: Type text into input (target = CSS selector, value = text to type)
+- SELECT: Select dropdown option (target = CSS selector, value = option value)
+- ASSERT: Verify element exists (target = CSS selector)
+- WAIT: Wait for element to appear (target = CSS selector)
+- SCREENSHOT: Take a screenshot for record
