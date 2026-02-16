@@ -5,6 +5,8 @@ import com.microsoft.playwright.Page;
 import com.team.aiworkflow.model.e2e.E2ETestRequest;
 import com.team.aiworkflow.model.e2e.E2ETestResult;
 import com.team.aiworkflow.model.e2e.TestStep;
+import com.team.aiworkflow.model.autofix.AutoFixResult;
+import com.team.aiworkflow.service.autofix.AutoFixOrchestrator;
 import com.team.aiworkflow.service.azuredevops.WorkItemService;
 import com.team.aiworkflow.service.e2e.TestScopeResolver.ResolvedTestFlow;
 import com.team.aiworkflow.service.e2e.TestScopeResolver.TestScope;
@@ -48,6 +50,7 @@ public class E2ETestOrchestrator {
     private final TeamsNotificationService teamsNotificationService;
     private final ClaudeApiService claudeApiService;
     private final ObjectMapper objectMapper;
+    private final AutoFixOrchestrator autoFixOrchestrator;
 
     // ========== 精準範圍模式（Push 觸發） ==========
 
@@ -209,9 +212,10 @@ public class E2ETestOrchestrator {
         result.setTotalDurationMs(
                 java.time.Duration.between(result.getStartedAt(), result.getCompletedAt()).toMillis());
 
-        // 建立 Work Item（附截圖）並通知團隊
+        // 建立 Work Item（附截圖）並嘗試自動修復
         createWorkItemsForBugs(result);
-        notifyTeam(result);
+        List<AutoFixResult> fixResults = attemptAutoFixes(result, request);
+        notifyTeam(result, fixResults);
 
         log.info("[{}] 精準 AI Test Agent完成，耗時 {}ms：{}",
                 testRunId, result.getTotalDurationMs(), result.getSummary());
@@ -359,7 +363,8 @@ public class E2ETestOrchestrator {
                 java.time.Duration.between(result.getStartedAt(), result.getCompletedAt()).toMillis());
 
         createWorkItemsForBugs(result);
-        notifyTeam(result);
+        List<AutoFixResult> fixResults = attemptAutoFixes(result, request);
+        notifyTeam(result, fixResults);
 
         log.info("[{}] AI Test Agent完成，耗時 {}ms：{}",
                 testRunId, result.getTotalDurationMs(), result.getSummary());
@@ -777,10 +782,29 @@ public class E2ETestOrchestrator {
     }
 
     /**
-     * 透過 Teams 通知團隊測試結果。
-     * 包含每個 bug 的簡短摘要，讓團隊成員在 Teams 就能看到問題概況。
+     * 對每個有 Work Item 的 bug 嘗試自動修復。
+     * 逐一處理，每個 bug 獨立分支。
      */
-    private void notifyTeam(E2ETestResult result) {
+    private List<AutoFixResult> attemptAutoFixes(E2ETestResult result, E2ETestRequest request) {
+        List<AutoFixResult> fixResults = new ArrayList<>();
+        for (E2ETestResult.BugFound bug : result.getBugsFound()) {
+            if (bug.getWorkItemId() <= 0) continue;
+            try {
+                AutoFixResult fixResult = autoFixOrchestrator.attemptFix(bug, request);
+                fixResults.add(fixResult);
+                log.info("Work Item #{} 自動修復結果：{}", bug.getWorkItemId(), fixResult.getStatus());
+            } catch (Exception e) {
+                log.error("Work Item #{} 自動修復發生例外：{}", bug.getWorkItemId(), e.getMessage());
+            }
+        }
+        return fixResults;
+    }
+
+    /**
+     * 透過 Teams 通知團隊測試結果。
+     * 包含每個 bug 的簡短摘要和自動修復結果。
+     */
+    private void notifyTeam(E2ETestResult result, List<AutoFixResult> fixResults) {
         String emoji = switch (result.getStatus()) {
             case PASSED -> "✅";
             case FAILED -> "🔴";
@@ -804,13 +828,44 @@ public class E2ETestOrchestrator {
             for (int i = 0; i < result.getBugsFound().size(); i++) {
                 E2ETestResult.BugFound bug = result.getBugsFound().get(i);
                 message.append(String.format("\n**Bug %d：%s**\n", i + 1, bug.getTitle()));
-                // expectedBehavior 存的是 AI 產出的人看摘要
                 if (bug.getExpectedBehavior() != null && !bug.getExpectedBehavior().isBlank()) {
                     message.append(bug.getExpectedBehavior()).append("\n");
                 }
                 if (bug.getWorkItemId() > 0) {
                     message.append(String.format("Work Item: #%d\n", bug.getWorkItemId()));
                 }
+            }
+        }
+
+        // 加入自動修復結果
+        if (fixResults != null && !fixResults.isEmpty()) {
+            message.append("\n---\n");
+            message.append("\n**🔧 AI Auto-Fix 結果**\n");
+            for (AutoFixResult fix : fixResults) {
+                String statusEmoji = switch (fix.getStatus()) {
+                    case FIX_APPLIED -> "✅";
+                    case DISABLED -> "⏸️";
+                    case NO_SOURCE_FILES, AI_GENERATION_ERROR, FIX_APPLY_ERROR -> "❌";
+                    default -> "⚠️";
+                };
+                message.append(String.format("\n%s WI #%d：%s", statusEmoji, fix.getWorkItemId(), fix.getStatus()));
+                if (fix.getBranchName() != null) {
+                    message.append(String.format("\n  分支：%s", fix.getBranchName()));
+                }
+                if (fix.getPullRequestId() != null) {
+                    message.append(String.format(" | PR #%d", fix.getPullRequestId()));
+                }
+                if (fix.getFixDescription() != null) {
+                    message.append(String.format("\n  修復：%s", fix.getFixDescription()));
+                }
+                message.append("\n");
+            }
+
+            // 提示 re-test 操作
+            boolean hasApplied = fixResults.stream()
+                    .anyMatch(f -> f.getStatus() == AutoFixResult.AutoFixStatus.FIX_APPLIED);
+            if (hasApplied) {
+                message.append("\n💡 請在 IDE 切到 ai-fix/* 分支、重啟 app 後，呼叫 `POST /e2e/autofix/retest/{workItemId}` 觸發驗證。\n");
             }
         }
 

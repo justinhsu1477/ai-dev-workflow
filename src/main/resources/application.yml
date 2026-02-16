@@ -67,6 +67,14 @@ workflow:
     enabled: false
   bug-fix:
     enabled: false
+  auto-fix:
+    enabled: ${AUTO_FIX_ENABLED:false}
+    target-repo-path: ${AUTO_FIX_TARGET_REPO_PATH:}
+    target-repo-id: ${AUTO_FIX_TARGET_REPO_ID:}
+    base-branch: ai-dev-workflow
+    branch-prefix: ai-fix/
+    max-files-to-read: 10
+    source-base-path: src/main/java/com/soetek/ods
 
 # 健康檢查端點
 management:

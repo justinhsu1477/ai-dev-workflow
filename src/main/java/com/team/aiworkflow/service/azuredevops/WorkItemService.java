@@ -155,6 +155,49 @@ public class WorkItemService {
     }
 
     /**
+     * 將 Work Item 狀態設為 Resolved 並加入結案說明。
+     * AI 自動修復通過 re-test 後呼叫此方法關閉 Work Item。
+     */
+    public Mono<Void> resolveWorkItem(int workItemId, String comment) {
+        log.info("正在關閉 Work Item #{}（Resolved）", workItemId);
+
+        List<Map<String, Object>> patchDocument = List.of(
+                Map.of("op", "replace", "path", "/fields/System.State", "value", "Resolved"),
+                Map.of("op", "add", "path", "/fields/System.History", "value", comment)
+        );
+
+        return webClient.patch()
+                .uri("/_apis/wit/workitems/{id}?api-version=7.1", workItemId)
+                .contentType(MediaType.valueOf("application/json-patch+json"))
+                .bodyValue(patchDocument)
+                .retrieve()
+                .bodyToMono(Void.class)
+                .doOnSuccess(v -> log.info("Work Item #{} 已關閉", workItemId))
+                .doOnError(e -> log.error("關閉 Work Item #{} 失敗：{}", workItemId, e.getMessage()));
+    }
+
+    /**
+     * 在 Work Item 的歷史記錄中加入註解。
+     * 用於記錄自動修復嘗試的結果。
+     */
+    public Mono<Void> addComment(int workItemId, String comment) {
+        log.info("正在為 Work Item #{} 加入註解", workItemId);
+
+        List<Map<String, Object>> patchDocument = List.of(
+                Map.of("op", "add", "path", "/fields/System.History", "value", comment)
+        );
+
+        return webClient.patch()
+                .uri("/_apis/wit/workitems/{id}?api-version=7.1", workItemId)
+                .contentType(MediaType.valueOf("application/json-patch+json"))
+                .bodyValue(patchDocument)
+                .retrieve()
+                .bodyToMono(Void.class)
+                .doOnSuccess(v -> log.info("Work Item #{} 已加入註解", workItemId))
+                .doOnError(e -> log.error("為 Work Item #{} 加入註解失敗：{}", workItemId, e.getMessage()));
+    }
+
+    /**
      * 根據 ID 取得 Work Item 詳細資訊。
      */
     @SuppressWarnings("unchecked")

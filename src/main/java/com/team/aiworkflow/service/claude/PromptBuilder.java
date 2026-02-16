@@ -1,5 +1,6 @@
 package com.team.aiworkflow.service.claude;
 
+import com.team.aiworkflow.model.e2e.E2ETestResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -75,6 +76,21 @@ public class PromptBuilder {
                 .replace("{{BUG_DESCRIPTION}}", bugDescription != null ? bugDescription : "")
                 .replace("{{CODE_CONTEXT}}", codeContext != null ? codeContext : "")
                 .replace("{{STACK_TRACE}}", stackTrace != null ? stackTrace : "No stack trace");
+    }
+
+    /**
+     * 從 E2E 測試發現的 Bug 建立修復 prompt。
+     * 提取 bug 的各項資訊，組裝成 bug description，再呼叫 buildBugFixPrompt。
+     */
+    public String buildE2EBugFixPrompt(E2ETestResult.BugFound bug, String codeContext) {
+        StringBuilder bugDesc = new StringBuilder();
+        bugDesc.append("## Page URL\n").append(bug.getPageUrl() != null ? bug.getPageUrl() : "N/A").append("\n\n");
+        bugDesc.append("## Expected Behavior\n").append(bug.getExpectedBehavior() != null ? bug.getExpectedBehavior() : "N/A").append("\n\n");
+        bugDesc.append("## Actual Behavior\n").append(bug.getActualBehavior() != null ? bug.getActualBehavior() : "N/A").append("\n\n");
+        bugDesc.append("## Bug Description\n").append(bug.getDescription() != null ? bug.getDescription() : "N/A").append("\n");
+
+        String consoleErrors = bug.getConsoleErrors();
+        return buildBugFixPrompt(bugDesc.toString(), codeContext, consoleErrors);
     }
 
     private String getDefaultFailureAnalysisTemplate() {
