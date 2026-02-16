@@ -169,6 +169,27 @@ public class GitDiffAnalysisService {
     }
 
     /**
+     * 檢查檔案路徑清單是否匹配任一 glob pattern。
+     * 公開方法，供 TestScopeResolver 做 flow-level 精準匹配使用。
+     *
+     * @param changedFiles 變更的檔案路徑清單
+     * @param patterns glob 模式清單
+     * @return 是否有任一檔案匹配任一模式
+     */
+    public boolean matchesAnyPattern(List<String> changedFiles, List<String> patterns) {
+        if (changedFiles == null || patterns == null) return false;
+        for (String filePath : changedFiles) {
+            String normalizedPath = filePath.replace('\\', '/');
+            for (String pattern : patterns) {
+                if (matchGlobPattern(normalizedPath, pattern)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * 檢查檔案路徑是否匹配模組的任一 file-pattern。
      * 使用 glob 模式比對（支援 **、* 等通配符）。
      */

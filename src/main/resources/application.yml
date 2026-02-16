@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: ai-dev-workflow
+  config:
+    import: optional:classpath:e2e-module-mapping.yml
 
 # Claude API 設定
 claude:

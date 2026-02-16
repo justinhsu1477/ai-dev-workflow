@@ -18,26 +18,35 @@ import java.util.stream.Collectors;
  * 根據受影響的模組 ID 集合，從映射表中查詢出具體的測試流程，
  * 組裝成 AI Agent 可執行的測試計畫。
  *
+ * 支援兩層精準匹配：
+ * 1. 模組層級：git diff → file-patterns → 匹配模組
+ * 2. Flow 層級：如果 test-flow 有定義 file-patterns，只在檔案匹配時才跑該 flow
+ *
  * 職責：
  * 1. 將模組 ID → 測試流程清單
  * 2. 依優先級排序測試流程
  * 3. 提供登入資訊（不同模組可能需要不同角色）
  * 4. 產出「測試範圍描述」供 AI Planner 參考
  */
+
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class TestScopeResolver {
 
     private final ModuleMapping moduleMapping;
+    private final GitDiffAnalysisService gitDiffAnalysisService;
 
     /**
      * 根據受影響的模組 ID 集合，解析出完整的測試範圍。
+     * 支援 flow-level 精準匹配：如果 test-flow 定義了 file-patterns，
+     * 只在變更檔案匹配 flow patterns 時才加入該 flow。
      *
      * @param affectedModuleIds 受影響的模組 ID 集合（如 ["order", "inventory"]）
+     * @param changedFiles 變更的檔案路徑清單（用於 flow-level 精準匹配，可為 null）
      * @return 測試範圍，包含所有需要執行的測試流程和登入資訊
      */
-    public TestScope resolveScope(Set<String> affectedModuleIds) {
+    public TestScope resolveScope(Set<String> affectedModuleIds, List<String> changedFiles) {
         if (affectedModuleIds == null || affectedModuleIds.isEmpty()) {
             log.info("沒有受影響的模組，回傳基本冒煙測試範圍");
             return buildSmokeTestScope();
@@ -53,7 +62,7 @@ public class TestScopeResolver {
             return buildSmokeTestScope();
         }
 
-        // 收集所有測試流程，依優先級排序
+        // 收集測試流程，支援 flow-level 精準匹配
         List<ResolvedTestFlow> allFlows = new ArrayList<>();
         Set<String> requiredRoles = new LinkedHashSet<>();
 
@@ -61,6 +70,16 @@ public class TestScopeResolver {
             requiredRoles.add(module.getRequiredRole());
 
             for (TestFlowDefinition flow : module.getTestFlows()) {
+                // flow-level 精準匹配：如果 flow 有定義自己的 file-patterns，
+                // 只在變更檔案匹配時才加入
+                if (flow.getFilePatterns() != null && !flow.getFilePatterns().isEmpty()
+                        && changedFiles != null && !changedFiles.isEmpty()) {
+                    if (!gitDiffAnalysisService.matchesAnyPattern(changedFiles, flow.getFilePatterns())) {
+                        log.debug("Flow '{}' 的 file-patterns 未匹配任何變更檔案，跳過", flow.getName());
+                        continue;
+                    }
+                }
+
                 allFlows.add(ResolvedTestFlow.builder()
                         .flowId(flow.getId())
                         .flowName(flow.getName())
@@ -73,6 +92,12 @@ public class TestScopeResolver {
                         .requiredRole(module.getRequiredRole())
                         .build());
             }
+        }
+
+        // 如果所有 flow 都被 flow-level 篩選掉了，回傳冒煙測試
+        if (allFlows.isEmpty()) {
+            log.info("模組 {} 的所有 flow 都未匹配變更檔案，回傳基本冒煙測試", affectedModuleIds);
+            return buildSmokeTestScope();
         }
 
         // 依優先級排序（數字越小越優先）
@@ -123,7 +148,8 @@ public class TestScopeResolver {
 
         log.info("部署觸發：解析 {} 個關鍵模組的測試範圍", criticalModuleIds.size());
 
-        TestScope scope = resolveScope(criticalModuleIds);
+        // 部署觸發不做 flow-level 篩選，跑所有 critical 模組的全部 flow
+        TestScope scope = resolveScope(criticalModuleIds, null);
         scope.setTriggerType("deployment");
         return scope;
     }

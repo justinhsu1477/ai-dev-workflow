@@ -366,30 +366,44 @@ public class E2ETestOrchestrator {
             playwrightService.navigate(page, loginUrl);
             playwrightService.waitForElement(page, scope.getLoginUsernameField(), 10000);
 
-            TestStep usernameStep = TestStep.builder()
-                    .action(TestStep.Action.TYPE)
-                    .target(scope.getLoginUsernameField())
-                    .value(scope.getLoginUsername())
-                    .description("輸入測試帳號")
-                    .build();
-            playwrightService.executeStep(page, usernameStep, testRunId);
+            // Vaadin LoginForm 使用 Web Components + Shadow DOM，
+            // 需要用 JavaScript 直接操作內部 input 欄位，fill() 對 Vaadin 元件不可靠
+            String username = scope.getLoginUsername();
+            String password = scope.getLoginPassword();
+            log.info("[{}] 填入帳號：{}", testRunId, username);
 
-            TestStep passwordStep = TestStep.builder()
-                    .action(TestStep.Action.TYPE)
-                    .target(scope.getLoginPasswordField())
-                    .value(scope.getLoginPassword())
-                    .description("輸入測試密碼")
-                    .build();
-            playwrightService.executeStep(page, passwordStep, testRunId);
+            // 用 JS 找到 Vaadin text-field 內部的 input 並設值
+            page.evaluate("""
+                (args) => {
+                    const usernameField = document.querySelector(args.usernameSelector);
+                    const passwordField = document.querySelector(args.passwordSelector);
+                    if (usernameField) {
+                        const uInput = usernameField.inputElement || usernameField.shadowRoot?.querySelector('input') || usernameField.querySelector('input');
+                        if (uInput) { uInput.value = args.username; uInput.dispatchEvent(new Event('input', {bubbles: true})); uInput.dispatchEvent(new Event('change', {bubbles: true})); }
+                        usernameField.value = args.username;
+                    }
+                    if (passwordField) {
+                        const pInput = passwordField.inputElement || passwordField.shadowRoot?.querySelector('input') || passwordField.querySelector('input');
+                        if (pInput) { pInput.value = args.password; pInput.dispatchEvent(new Event('input', {bubbles: true})); pInput.dispatchEvent(new Event('change', {bubbles: true})); }
+                        passwordField.value = args.password;
+                    }
+                }
+                """,
+                    java.util.Map.of(
+                            "usernameSelector", scope.getLoginUsernameField(),
+                            "passwordSelector", scope.getLoginPasswordField(),
+                            "username", username,
+                            "password", password
+                    ));
 
-            TestStep submitStep = TestStep.builder()
-                    .action(TestStep.Action.CLICK)
-                    .target(scope.getLoginSubmitButton())
-                    .description("點擊登入按鈕")
-                    .build();
-            playwrightService.executeStep(page, submitStep, testRunId);
+            // 等一下讓 Vaadin 同步狀態
+            Thread.sleep(500);
 
-            Thread.sleep(2000);
+            // 點擊登入按鈕
+            page.locator(scope.getLoginSubmitButton()).first().click();
+
+            // 等待頁面跳轉
+            Thread.sleep(3000);
 
             String currentUrl = playwrightService.getCurrentUrl(page);
             boolean success = !currentUrl.contains("/login");

@@ -9,449 +9,474 @@
 # 兩層觸發策略：
 #   Push 觸發 → git diff 分析 → 只跑受影響模組的測試（快速，2-5 分鐘）
 #   Deploy 觸發 → 跑所有 critical=true 的模組測試（完整，10-20 分鐘）
+#
+# 精準匹配策略：
+#   test-flow 可定義自己的 file-patterns（可選）。
+#   有定義 → 只在檔案匹配 flow-level patterns 時才跑該 flow
+#   沒定義 → 模組匹配就全跑（向下相容）
 # ============================================================
 
-# 應用程式登入設定（AI Agent 需要登入才能測試）
-login:
-  url: "/login"
-  username-field: "#vaadinLoginUsername"
-  password-field: "#vaadinLoginPassword"
-  submit-button: "vaadin-button[theme~='submit']"
-  # 測試帳號（從環境變數注入，不寫死在設定檔）
-  test-username: ${E2E_TEST_USERNAME:admin}
-  test-password: ${E2E_TEST_PASSWORD:admin}
-  # 登入成功後的預期跳轉路徑
-  success-redirect: "/"
-  # 不同角色的測試帳號（用於角色專屬頁面測試）
-  role-accounts:
-    ADMIN:
-      username: ${E2E_ADMIN_USERNAME:admin}
-      password: ${E2E_ADMIN_PASSWORD:admin}
-    SALES:
-      username: ${E2E_SALES_USERNAME:sales_test}
-      password: ${E2E_SALES_PASSWORD:sales_test}
-    INVENTORY:
-      username: ${E2E_INVENTORY_USERNAME:inventory_test}
-      password: ${E2E_INVENTORY_PASSWORD:inventory_test}
-    CAPTAIN:
-      username: ${E2E_CAPTAIN_USERNAME:captain_test}
-      password: ${E2E_CAPTAIN_PASSWORD:captain_test}
+e2e-mapping:
 
-# ============================================================
-# 模組映射定義
-# ============================================================
-modules:
+  # 應用程式登入設定（AI Agent 需要登入才能測試）
+  login:
+    url: "/login"
+    username-field: "#vaadinLoginUsername"
+    password-field: "#vaadinLoginPassword"
+    submit-button: "vaadin-button[theme~='submit']"
+    # 測試帳號（從環境變數注入，不寫死在設定檔）
+    test-username: ${E2E_TEST_USERNAME:admin}
+    test-password: ${E2E_TEST_PASSWORD:admin}
+    # 登入成功後的預期跳轉路徑
+    success-redirect: "/"
+    # 不同角色的測試帳號（用於角色專屬頁面測試）
+    role-accounts:
+      ADMIN:
+        username: ${E2E_ADMIN_USERNAME:admin}
+        password: ${E2E_ADMIN_PASSWORD:admin}
+      SALES:
+        username: ${E2E_SALES_USERNAME:sales_test}
+        password: ${E2E_SALES_PASSWORD:sales_test}
+      INVENTORY:
+        username: ${E2E_INVENTORY_USERNAME:inventory_test}
+        password: ${E2E_INVENTORY_PASSWORD:inventory_test}
+      CAPTAIN:
+        username: ${E2E_CAPTAIN_USERNAME:captain_test}
+        password: ${E2E_CAPTAIN_PASSWORD:captain_test}
 
-  # ----------------------------------------------------------
-  # 訂貨作業模組
-  # ----------------------------------------------------------
-  - id: order
-    name: "訂貨作業"
-    critical: true
-    # 原始碼中哪些檔案路徑變更會觸發此模組的測試
-    file-patterns:
-      - "**/views/order/**"
-      - "**/views/salesorder/**"
-      - "**/service/order/**"
-      - "**/repository/**/SalesOrder*"
-      - "**/repository/**/CustomerOrder*"
-      - "**/repository/**/PurchaseOrder*"
-      - "**/repository/**/SalesPurchaseOrder*"
-      - "**/model/entity/**/SalesOrder*"
-      - "**/model/entity/**/CustomerOrder*"
-      - "**/model/entity/**/PurchaseOrder*"
-    required-role: "ADMIN"
-    test-flows:
-      - id: order-daily
-        name: "業務員每日訂貨流程"
-        description: "驗證業務員可以進入訂貨頁面、查看商品、填寫訂貨數量、送出訂單"
-        route: "/order/d2"
-        priority: 1
-        steps-hint: "導航到 /order/d2 → 確認頁面載入 → 查看訂貨表格 → 嘗試輸入數量 → 送出"
-      - id: order-summary
-        name: "彙總訂貨總表"
-        description: "驗證可以查看彙總訂貨資料，表格正確顯示"
-        route: "/order/summary"
-        priority: 2
-        steps-hint: "導航到 /order/summary → 確認表格載入 → 驗證資料欄位存在"
-      - id: order-branch
-        name: "庫務對工廠訂貨"
-        description: "驗證庫務人員可以查看和操作對工廠訂貨單"
-        route: "/order/branch-order"
-        priority: 2
-        steps-hint: "導航到 /order/branch-order → 確認頁面載入 → 驗證訂貨單列表"
-      - id: order-adjust
-        name: "修改預計配貨量"
-        description: "驗證主管可以修改預計配貨量"
-        route: "/order/chief-adjust"
-        priority: 3
-        steps-hint: "導航到 /order/chief-adjust → 確認表格載入 → 嘗試修改數量"
-      - id: order-detail
-        name: "訂貨明細報表"
-        description: "驗證訂貨明細報表可正常查詢和顯示"
-        route: "/order/order-detail"
-        priority: 3
-        steps-hint: "導航到 /order/order-detail → 選擇查詢條件 → 確認報表產出"
+  # ============================================================
+  # 模組映射定義
+  # ============================================================
+  modules:
 
-  # ----------------------------------------------------------
-  # 銷售訂單修改模組
-  # ----------------------------------------------------------
-  - id: sale
-    name: "銷售訂單修改作業"
-    critical: true
-    file-patterns:
-      - "**/views/sale/**"
-      - "**/service/order/SalesOrder*"
-      - "**/repository/**/SalesOrder*"
-      - "**/model/entity/**/SalesOrder*"
-    required-role: "ADMIN"
-    test-flows:
-      - id: sale-order-record
-        name: "訂單紀錄查詢"
-        description: "驗證可以查詢和檢視銷售訂單紀錄"
-        route: "/sale/sale-order"
-        priority: 1
-        steps-hint: "導航到 /sale/sale-order → 確認頁面載入 → 查詢訂單 → 驗證結果顯示"
+    # ----------------------------------------------------------
+    # 訂貨作業模組
+    # ----------------------------------------------------------
+    - id: order
+      name: "訂貨作業"
+      critical: true
+      # 模組層級 file-patterns（決定此模組是否受影響）
+      file-patterns:
+        - "**/views/order/**"
+        - "**/views/salesorder/**"
+        - "**/service/order/**"
+        - "**/repository/**/SalesOrder*"
+        - "**/repository/**/CustomerOrder*"
+        - "**/repository/**/PurchaseOrder*"
+        - "**/repository/**/SalesPurchaseOrder*"
+        - "**/model/entity/**/SalesOrder*"
+        - "**/model/entity/**/CustomerOrder*"
+        - "**/model/entity/**/PurchaseOrder*"
+      required-role: "ADMIN"
+      test-flows:
+        - id: order-daily
+          name: "業務員每日訂貨流程"
+          description: "驗證業務員可以進入訂貨頁面、查看商品、填寫訂貨數量、送出訂單"
+          route: "/order/d2"
+          priority: 1
+          steps-hint: "導航到 /order/d2 → 確認頁面載入 → 查看訂貨表格 → 嘗試輸入數量 → 點擊儲存"
+          # flow 層級精準匹配：只有改到 d2 相關檔案才跑這個 flow
+          file-patterns:
+            - "**/views/order/d2/**"
+            - "**/views/order/*D2*"
+            - "**/views/order/*SalesOrder*"
+        - id: order-summary
+          name: "彙總訂貨總表"
+          description: "驗證可以查看彙總訂貨資料，表格正確顯示"
+          route: "/order/summary"
+          priority: 2
+          steps-hint: "導航到 /order/summary → 確認表格載入 → 驗證資料欄位存在"
+          file-patterns:
+            - "**/views/order/summary/**"
+            - "**/views/order/*Summary*"
+        - id: order-branch
+          name: "庫務對工廠訂貨"
+          description: "驗證庫務人員可以查看和操作對工廠訂貨單"
+          route: "/order/branch-order"
+          priority: 2
+          steps-hint: "導航到 /order/branch-order → 確認頁面載入 → 驗證訂貨單列表"
+          file-patterns:
+            - "**/views/order/branchorder/**"
+            - "**/views/order/*BranchOrder*"
+            - "**/views/order/*PurchaseOrder*"
+        - id: order-adjust
+          name: "修改預計配貨量"
+          description: "驗證主管可以修改預計配貨量"
+          route: "/order/chief-adjust"
+          priority: 3
+          steps-hint: "導航到 /order/chief-adjust → 確認表格載入 → 嘗試修改數量"
+          file-patterns:
+            - "**/views/order/chiefadjust/**"
+            - "**/views/order/*ChiefAdjust*"
+        - id: order-detail
+          name: "訂貨明細報表"
+          description: "驗證訂貨明細報表可正常查詢和顯示"
+          route: "/order/order-detail"
+          priority: 3
+          steps-hint: "導航到 /order/order-detail → 選擇查詢條件 → 確認報表產出"
+          file-patterns:
+            - "**/views/order/orderdetail/**"
+            - "**/views/order/*OrderDetail*"
 
-  # ----------------------------------------------------------
-  # 庫務作業模組
-  # ----------------------------------------------------------
-  - id: inventory
-    name: "庫務作業"
-    critical: true
-    file-patterns:
-      - "**/views/inventory/**"
-      - "**/views/transfer/**"
-      - "**/service/inventory/**"
-      - "**/service/order/Assignment*"
-      - "**/repository/**/Assignment*"
-      - "**/repository/**/DeliveryNote*"
-      - "**/repository/**/KeepReturn*"
-      - "**/repository/**/LocationInventory*"
-      - "**/repository/**/InventoryAdjust*"
-      - "**/repository/**/BranchTransferOrder*"
-      - "**/model/entity/**/Assignment*"
-      - "**/model/entity/**/DeliveryNote*"
-      - "**/model/entity/**/LocationInventory*"
-      - "**/model/entity/**/InventoryTransfer*"
-    required-role: "ADMIN"
-    test-flows:
-      - id: inventory-distribution
-        name: "配貨總表"
-        description: "驗證配貨總表可正常載入和顯示配貨資訊"
-        route: "/inventory/distribution/summary"
-        priority: 1
-        steps-hint: "導航到 /inventory/distribution/summary → 確認表格載入 → 驗證配貨資料"
-      - id: inventory-assignment
-        name: "配貨單"
-        description: "驗證配貨單頁面可正常操作"
-        route: "/assignment-order"
-        priority: 1
-        steps-hint: "導航到 /assignment-order → 確認頁面載入 → 驗證配貨單列表"
-      - id: inventory-delivery
-        name: "收貨數量確認"
-        description: "驗證收貨數量確認頁面可正常運作"
-        route: "/inventory/delivery-note"
-        priority: 2
-        steps-hint: "導航到 /inventory/delivery-note → 確認頁面載入 → 驗證收貨功能"
-      - id: inventory-keep
-        name: "寄還庫確認"
-        description: "驗證寄還庫確認頁面可正常查詢和操作"
-        route: "/inventory/keep/search"
-        priority: 2
-        steps-hint: "導航到 /inventory/keep/search → 確認搜尋功能 → 驗證結果顯示"
-      - id: inventory-transfer
-        name: "調撥單"
-        description: "驗證調撥單建立和查詢功能"
-        route: "/transfer/branch-transfer-order"
-        priority: 2
-        steps-hint: "導航到 /transfer/branch-transfer-order → 確認頁面載入 → 驗證調撥功能"
-      - id: inventory-adjust
-        name: "其他銷售調整"
-        description: "驗證其他銷售調整功能"
-        route: "/transfer/inventory-adjust"
-        priority: 3
-        steps-hint: "導航到 /transfer/inventory-adjust → 確認頁面載入"
+    # ----------------------------------------------------------
+    # 銷售訂單修改模組
+    # ----------------------------------------------------------
+    - id: sale
+      name: "銷售訂單修改作業"
+      critical: true
+      file-patterns:
+        - "**/views/sale/**"
+        - "**/service/order/SalesOrder*"
+        - "**/repository/**/SalesOrder*"
+        - "**/model/entity/**/SalesOrder*"
+      required-role: "ADMIN"
+      test-flows:
+        - id: sale-order-record
+          name: "訂單紀錄查詢"
+          description: "驗證可以查詢和檢視銷售訂單紀錄"
+          route: "/sale/sale-order"
+          priority: 1
+          steps-hint: "導航到 /sale/sale-order → 確認頁面載入 → 查詢訂單 → 驗證結果顯示"
 
-  # ----------------------------------------------------------
-  # 個人作業模組
-  # ----------------------------------------------------------
-  - id: sales-personal
-    name: "個人作業"
-    critical: false
-    file-patterns:
-      - "**/views/sales/**"
-      - "**/service/sales/**"
-      - "**/repository/**/VisitPlan*"
-      - "**/repository/**/VisitSchedule*"
-      - "**/repository/**/DataSetVersion*"
-      - "**/model/entity/**/VisitPlan*"
-      - "**/model/entity/**/DataSetVersion*"
-    required-role: "ADMIN"
-    test-flows:
-      - id: sales-upload
-        name: "SAP 轉檔作業"
-        description: "驗證 SAP 轉檔上傳確認功能"
-        route: "/sales/sales-ods-app-upload-confirm"
-        priority: 2
-        steps-hint: "導航到 /sales/sales-ods-app-upload-confirm → 確認頁面載入 → 驗證功能"
-      - id: sales-upload-list
-        name: "SAP 轉檔查詢"
-        description: "驗證 SAP 轉檔記錄查詢功能"
-        route: "/sales/sales-ods-app-upload-confirm-list"
-        priority: 2
-        steps-hint: "導航到 /sales/sales-ods-app-upload-confirm-list → 確認列表載入"
-      - id: sales-visit-plan
-        name: "拜訪計畫維護"
-        description: "驗證業務員拜訪計畫的建立和查詢功能"
-        route: "/sales/visit-plan"
-        priority: 2
-        steps-hint: "導航到 /sales/visit-plan → 確認頁面載入 → 驗證計畫列表"
+    # ----------------------------------------------------------
+    # 庫務作業模組
+    # ----------------------------------------------------------
+    - id: inventory
+      name: "庫務作業"
+      critical: true
+      file-patterns:
+        - "**/views/inventory/**"
+        - "**/views/transfer/**"
+        - "**/service/inventory/**"
+        - "**/service/order/Assignment*"
+        - "**/repository/**/Assignment*"
+        - "**/repository/**/DeliveryNote*"
+        - "**/repository/**/KeepReturn*"
+        - "**/repository/**/LocationInventory*"
+        - "**/repository/**/InventoryAdjust*"
+        - "**/repository/**/BranchTransferOrder*"
+        - "**/model/entity/**/Assignment*"
+        - "**/model/entity/**/DeliveryNote*"
+        - "**/model/entity/**/LocationInventory*"
+        - "**/model/entity/**/InventoryTransfer*"
+      required-role: "ADMIN"
+      test-flows:
+        - id: inventory-distribution
+          name: "配貨總表"
+          description: "驗證配貨總表可正常載入和顯示配貨資訊"
+          route: "/inventory/distribution/summary"
+          priority: 1
+          steps-hint: "導航到 /inventory/distribution/summary → 確認表格載入 → 驗證配貨資料"
+        - id: inventory-assignment
+          name: "配貨單"
+          description: "驗證配貨單頁面可正常操作"
+          route: "/assignment-order"
+          priority: 1
+          steps-hint: "導航到 /assignment-order → 確認頁面載入 → 驗證配貨單列表"
+        - id: inventory-delivery
+          name: "收貨數量確認"
+          description: "驗證收貨數量確認頁面可正常運作"
+          route: "/inventory/delivery-note"
+          priority: 2
+          steps-hint: "導航到 /inventory/delivery-note → 確認頁面載入 → 驗證收貨功能"
+        - id: inventory-keep
+          name: "寄還庫確認"
+          description: "驗證寄還庫確認頁面可正常查詢和操作"
+          route: "/inventory/keep/search"
+          priority: 2
+          steps-hint: "導航到 /inventory/keep/search → 確認搜尋功能 → 驗證結果顯示"
+        - id: inventory-transfer
+          name: "調撥單"
+          description: "驗證調撥單建立和查詢功能"
+          route: "/transfer/branch-transfer-order"
+          priority: 2
+          steps-hint: "導航到 /transfer/branch-transfer-order → 確認頁面載入 → 驗證調撥功能"
+        - id: inventory-adjust
+          name: "其他銷售調整"
+          description: "驗證其他銷售調整功能"
+          route: "/transfer/inventory-adjust"
+          priority: 3
+          steps-hint: "導航到 /transfer/inventory-adjust → 確認頁面載入"
 
-  # ----------------------------------------------------------
-  # 組長作業模組
-  # ----------------------------------------------------------
-  - id: captain
-    name: "組長作業"
-    critical: false
-    file-patterns:
-      - "**/views/sales/SalesmanAssignment*"
-      - "**/views/sales/AssignVisitAgent*"
-      - "**/service/sales/SalesmanAssignment*"
-      - "**/service/sales/VisitAgent*"
-      - "**/repository/**/VisitAgent*"
-    required-role: "CAPTAIN"
-    test-flows:
-      - id: captain-assignment
-        name: "接單送貨指派"
-        description: "驗證組長可以指派接單送貨任務"
-        route: "/sales/salesman-assignment"
-        priority: 2
-        steps-hint: "導航到 /sales/salesman-assignment → 確認頁面載入 → 驗證指派功能"
-      - id: captain-agent
-        name: "休假代送指派"
-        description: "驗證休假代送指派功能"
-        route: "/sales/assign-agent"
-        priority: 3
-        steps-hint: "導航到 /sales/assign-agent → 確認頁面載入"
+    # ----------------------------------------------------------
+    # 個人作業模組
+    # ----------------------------------------------------------
+    - id: sales-personal
+      name: "個人作業"
+      critical: false
+      file-patterns:
+        - "**/views/sales/**"
+        - "**/service/sales/**"
+        - "**/repository/**/VisitPlan*"
+        - "**/repository/**/VisitSchedule*"
+        - "**/repository/**/DataSetVersion*"
+        - "**/model/entity/**/VisitPlan*"
+        - "**/model/entity/**/DataSetVersion*"
+      required-role: "ADMIN"
+      test-flows:
+        - id: sales-upload
+          name: "SAP 轉檔作業"
+          description: "驗證 SAP 轉檔上傳確認功能"
+          route: "/sales/sales-ods-app-upload-confirm"
+          priority: 2
+          steps-hint: "導航到 /sales/sales-ods-app-upload-confirm → 確認頁面載入 → 驗證功能"
+        - id: sales-upload-list
+          name: "SAP 轉檔查詢"
+          description: "驗證 SAP 轉檔記錄查詢功能"
+          route: "/sales/sales-ods-app-upload-confirm-list"
+          priority: 2
+          steps-hint: "導航到 /sales/sales-ods-app-upload-confirm-list → 確認列表載入"
+        - id: sales-visit-plan
+          name: "拜訪計畫維護"
+          description: "驗證業務員拜訪計畫的建立和查詢功能"
+          route: "/sales/visit-plan"
+          priority: 2
+          steps-hint: "導航到 /sales/visit-plan → 確認頁面載入 → 驗證計畫列表"
 
-  # ----------------------------------------------------------
-  # 呆品回廠作業模組
-  # ----------------------------------------------------------
-  - id: return
-    name: "呆品回廠作業"
-    critical: false
-    file-patterns:
-      - "**/views/returnbranch/**"
-      - "**/views/factoryreturn/**"
-      - "**/service/**/ReturnFactory*"
-      - "**/service/**/ReturnTotal*"
-      - "**/repository/**/SalesObsolete*"
-      - "**/repository/**/BranchObsolete*"
-      - "**/model/entity/**/SalesObsolete*"
-      - "**/model/entity/**/BranchObsolete*"
-    required-role: "ADMIN"
-    test-flows:
-      - id: return-branch
-        name: "業務員呆品退庫"
-        description: "驗證業務員呆品退庫申請和查詢功能"
-        route: "/return/return-branch"
-        priority: 2
-        steps-hint: "導航到 /return/return-branch → 確認頁面載入 → 驗證退庫功能"
-      - id: return-factory
-        name: "呆品回廠總表"
-        description: "驗證呆品回廠彙總資料"
-        route: "/return/factory-return"
-        priority: 3
-        steps-hint: "導航到 /return/factory-return → 確認表格載入"
+    # ----------------------------------------------------------
+    # 組長作業模組
+    # ----------------------------------------------------------
+    - id: captain
+      name: "組長作業"
+      critical: false
+      file-patterns:
+        - "**/views/sales/SalesmanAssignment*"
+        - "**/views/sales/AssignVisitAgent*"
+        - "**/service/sales/SalesmanAssignment*"
+        - "**/service/sales/VisitAgent*"
+        - "**/repository/**/VisitAgent*"
+      required-role: "CAPTAIN"
+      test-flows:
+        - id: captain-assignment
+          name: "接單送貨指派"
+          description: "驗證組長可以指派接單送貨任務"
+          route: "/sales/salesman-assignment"
+          priority: 2
+          steps-hint: "導航到 /sales/salesman-assignment → 確認頁面載入 → 驗證指派功能"
+        - id: captain-agent
+          name: "休假代送指派"
+          description: "驗證休假代送指派功能"
+          route: "/sales/assign-agent"
+          priority: 3
+          steps-hint: "導航到 /sales/assign-agent → 確認頁面載入"
 
-  # ----------------------------------------------------------
-  # 樣品申請作業模組
-  # ----------------------------------------------------------
-  - id: sample
-    name: "樣品申請作業"
-    critical: false
-    file-patterns:
-      - "**/views/sample/**"
-      - "**/service/sample/**"
-      - "**/repository/**/PromoteActivity*"
-      - "**/model/entity/**/PromoteActivity*"
-    required-role: "ADMIN"
-    test-flows:
-      - id: sample-activity
-        name: "活動案號維護"
-        description: "驗證活動案號的建立和維護功能"
-        route: "/sample/virtual-activity-creation"
-        priority: 2
-        steps-hint: "導航到 /sample/virtual-activity-creation → 確認頁面載入 → 驗證活動列表"
-      - id: sample-review
-        name: "搭贈申請樣品單查詢"
-        description: "驗證搭贈申請樣品單查詢功能"
-        route: "/sample/review"
-        priority: 3
-        steps-hint: "導航到 /sample/review → 確認頁面載入 → 查詢樣品單"
-      - id: sample-selection
-        name: "樣品搭贈訂單挑選"
-        description: "驗證樣品搭贈訂單挑選流程"
-        route: "/sample/selection"
-        priority: 3
-        steps-hint: "導航到 /sample/selection → 確認頁面載入"
+    # ----------------------------------------------------------
+    # 呆品回廠作業模組
+    # ----------------------------------------------------------
+    - id: return
+      name: "呆品回廠作業"
+      critical: false
+      file-patterns:
+        - "**/views/returnbranch/**"
+        - "**/views/factoryreturn/**"
+        - "**/service/**/ReturnFactory*"
+        - "**/service/**/ReturnTotal*"
+        - "**/repository/**/SalesObsolete*"
+        - "**/repository/**/BranchObsolete*"
+        - "**/model/entity/**/SalesObsolete*"
+        - "**/model/entity/**/BranchObsolete*"
+      required-role: "ADMIN"
+      test-flows:
+        - id: return-branch
+          name: "業務員呆品退庫"
+          description: "驗證業務員呆品退庫申請和查詢功能"
+          route: "/return/return-branch"
+          priority: 2
+          steps-hint: "導航到 /return/return-branch → 確認頁面載入 → 驗證退庫功能"
+        - id: return-factory
+          name: "呆品回廠總表"
+          description: "驗證呆品回廠彙總資料"
+          route: "/return/factory-return"
+          priority: 3
+          steps-hint: "導航到 /return/factory-return → 確認表格載入"
 
-  # ----------------------------------------------------------
-  # 營業所管理模組（含權限管理）
-  # ----------------------------------------------------------
-  - id: branch-management
-    name: "營業所管理"
-    critical: false
-    file-patterns:
-      - "**/views/branch/**"
-      - "**/views/access/**"
-      - "**/views/apk/**"
-      - "**/service/branch/**"
-      - "**/service/auth/**"
-      - "**/service/api/ApkFile*"
-      - "**/repository/auth/**"
-      - "**/repository/**/SalesBranch*"
-      - "**/model/entity/auth/**"
-    required-role: "ADMIN"
-    test-flows:
-      - id: branch-product-sort
-        name: "物料排序調整"
-        description: "驗證物料排序調整功能"
-        route: "/branch/product/sort"
-        priority: 3
-        steps-hint: "導航到 /branch/product/sort → 確認頁面載入 → 驗證排序功能"
-      - id: access-member
-        name: "使用者資料維護"
-        description: "驗證使用者資料的查詢和維護功能"
-        route: "/access-management/member-management"
-        priority: 2
-        steps-hint: "導航到 /access-management/member-management → 確認使用者列表載入"
-      - id: access-role
-        name: "角色設定"
-        description: "驗證角色設定頁面可正常載入"
-        route: "/access-management/auth-role"
-        priority: 3
-        steps-hint: "導航到 /access-management/auth-role → 確認角色列表載入"
+    # ----------------------------------------------------------
+    # 樣品申請作業模組
+    # ----------------------------------------------------------
+    - id: sample
+      name: "樣品申請作業"
+      critical: false
+      file-patterns:
+        - "**/views/sample/**"
+        - "**/service/sample/**"
+        - "**/repository/**/PromoteActivity*"
+        - "**/model/entity/**/PromoteActivity*"
+      required-role: "ADMIN"
+      test-flows:
+        - id: sample-activity
+          name: "活動案號維護"
+          description: "驗證活動案號的建立和維護功能"
+          route: "/sample/virtual-activity-creation"
+          priority: 2
+          steps-hint: "導航到 /sample/virtual-activity-creation → 確認頁面載入 → 驗證活動列表"
+        - id: sample-review
+          name: "搭贈申請樣品單查詢"
+          description: "驗證搭贈申請樣品單查詢功能"
+          route: "/sample/review"
+          priority: 3
+          steps-hint: "導航到 /sample/review → 確認頁面載入 → 查詢樣品單"
+        - id: sample-selection
+          name: "樣品搭贈訂單挑選"
+          description: "驗證樣品搭贈訂單挑選流程"
+          route: "/sample/selection"
+          priority: 3
+          steps-hint: "導航到 /sample/selection → 確認頁面載入"
 
-  # ----------------------------------------------------------
-  # 公佈欄模組
-  # ----------------------------------------------------------
-  - id: bulletin
-    name: "公佈欄"
-    critical: false
-    file-patterns:
-      - "**/views/bulletin/**"
-      - "**/service/**/Bul*"
-      - "**/service/**/Bulletin*"
-      - "**/service/**/News*"
-      - "**/repository/**/BulBulletin*"
-      - "**/repository/**/BulAttachment*"
-      - "**/repository/**/NewsItem*"
-      - "**/model/entity/**/BulBulletin*"
-    required-role: "ADMIN"
-    test-flows:
-      - id: bulletin-list
-        name: "公告列表"
-        description: "驗證公告列表頁面可正常載入和顯示公告"
-        route: "/bulletin-board/notice-board"
-        priority: 2
-        steps-hint: "導航到 /bulletin-board/notice-board → 確認公告列表載入 → 驗證公告內容"
-      - id: bulletin-manage
-        name: "公告管理"
-        description: "驗證公告管理的建立、編輯、查詢功能"
-        route: "/bulletin-board/announcement-management"
-        priority: 3
-        steps-hint: "導航到 /bulletin-board/announcement-management → 確認頁面載入"
-      - id: bulletin-categories
-        name: "公告類別管理"
-        description: "驗證公告類別的設定功能"
-        route: "/bulletin-board/announcement-categories"
-        priority: 3
-        steps-hint: "導航到 /bulletin-board/announcement-categories → 確認頁面載入"
+    # ----------------------------------------------------------
+    # 營業所管理模組（含權限管理）
+    # ----------------------------------------------------------
+    - id: branch-management
+      name: "營業所管理"
+      critical: false
+      file-patterns:
+        - "**/views/branch/**"
+        - "**/views/access/**"
+        - "**/views/apk/**"
+        - "**/service/branch/**"
+        - "**/service/auth/**"
+        - "**/service/api/ApkFile*"
+        - "**/repository/auth/**"
+        - "**/repository/**/SalesBranch*"
+        - "**/model/entity/auth/**"
+      required-role: "ADMIN"
+      test-flows:
+        - id: branch-product-sort
+          name: "物料排序調整"
+          description: "驗證物料排序調整功能"
+          route: "/branch/product/sort"
+          priority: 3
+          steps-hint: "導航到 /branch/product/sort → 確認頁面載入 → 驗證排序功能"
+        - id: access-member
+          name: "使用者資料維護"
+          description: "驗證使用者資料的查詢和維護功能"
+          route: "/access-management/member-management"
+          priority: 2
+          steps-hint: "導航到 /access-management/member-management → 確認使用者列表載入"
+        - id: access-role
+          name: "角色設定"
+          description: "驗證角色設定頁面可正常載入"
+          route: "/access-management/auth-role"
+          priority: 3
+          steps-hint: "導航到 /access-management/auth-role → 確認角色列表載入"
 
-  # ----------------------------------------------------------
-  # 報表模組
-  # ----------------------------------------------------------
-  - id: report
-    name: "報表"
-    critical: false
-    file-patterns:
-      - "**/views/report/**"
-      - "**/service/report/**"
-    required-role: "ADMIN"
-    test-flows:
-      - id: report-sales-detail
-        name: "業務銷售明細表"
-        description: "驗證業務銷售明細報表的查詢和產出功能"
-        route: "/report/sales-detail"
-        priority: 2
-        steps-hint: "導航到 /report/sales-detail → 選擇查詢條件 → 確認報表載入"
-      - id: report-stock-flow
-        name: "業務員進銷存合計表"
-        description: "驗證進銷存報表功能"
-        route: "/report/stock-flow"
-        priority: 3
-        steps-hint: "導航到 /report/stock-flow → 確認頁面載入"
-      - id: report-daily
-        name: "業務員日報表"
-        description: "驗證業務員日報表功能"
-        route: "/report/sales-daily"
-        priority: 3
-        steps-hint: "導航到 /report/sales-daily → 確認頁面載入"
+    # ----------------------------------------------------------
+    # 公佈欄模組
+    # ----------------------------------------------------------
+    - id: bulletin
+      name: "公佈欄"
+      critical: false
+      file-patterns:
+        - "**/views/bulletin/**"
+        - "**/service/**/Bul*"
+        - "**/service/**/Bulletin*"
+        - "**/service/**/News*"
+        - "**/repository/**/BulBulletin*"
+        - "**/repository/**/BulAttachment*"
+        - "**/repository/**/NewsItem*"
+        - "**/model/entity/**/BulBulletin*"
+      required-role: "ADMIN"
+      test-flows:
+        - id: bulletin-list
+          name: "公告列表"
+          description: "驗證公告列表頁面可正常載入和顯示公告"
+          route: "/bulletin-board/notice-board"
+          priority: 2
+          steps-hint: "導航到 /bulletin-board/notice-board → 確認公告列表載入 → 驗證公告內容"
+        - id: bulletin-manage
+          name: "公告管理"
+          description: "驗證公告管理的建立、編輯、查詢功能"
+          route: "/bulletin-board/announcement-management"
+          priority: 3
+          steps-hint: "導航到 /bulletin-board/announcement-management → 確認頁面載入"
+        - id: bulletin-categories
+          name: "公告類別管理"
+          description: "驗證公告類別的設定功能"
+          route: "/bulletin-board/announcement-categories"
+          priority: 3
+          steps-hint: "導航到 /bulletin-board/announcement-categories → 確認頁面載入"
 
-  # ----------------------------------------------------------
-  # 登入 / 安全性模組
-  # ----------------------------------------------------------
-  - id: auth
-    name: "登入與安全性"
-    critical: true
-    file-patterns:
-      - "**/views/LoginView*"
-      - "**/views/layout/MainLayout*"
-      - "**/security/**"
-      - "**/service/auth/Authentication*"
-      - "**/service/auth/Security*"
-      - "**/service/auth/JpaUserDetails*"
-      - "**/config/Security*"
-    required-role: "ADMIN"
-    test-flows:
-      - id: auth-login
-        name: "登入流程"
-        description: "驗證使用者可以正常登入系統，輸入帳號密碼後跳轉到首頁"
-        route: "/login"
-        priority: 1
-        steps-hint: "導航到 /login → 輸入帳號 → 輸入密碼 → 點擊登入 → 確認跳轉到首頁"
-      - id: auth-navigation
-        name: "側邊導航"
-        description: "驗證登入後側邊欄導航列正確顯示，各選單項目可點擊"
-        route: "/"
-        priority: 1
-        steps-hint: "確認側邊欄存在 → 驗證各分類選單顯示 → 點擊選單項目 → 確認頁面跳轉"
+    # ----------------------------------------------------------
+    # 報表模組
+    # ----------------------------------------------------------
+    - id: report
+      name: "報表"
+      critical: false
+      file-patterns:
+        - "**/views/report/**"
+        - "**/service/report/**"
+      required-role: "ADMIN"
+      test-flows:
+        - id: report-sales-detail
+          name: "業務銷售明細表"
+          description: "驗證業務銷售明細報表的查詢和產出功能"
+          route: "/report/sales-detail"
+          priority: 2
+          steps-hint: "導航到 /report/sales-detail → 選擇查詢條件 → 確認報表載入"
+        - id: report-stock-flow
+          name: "業務員進銷存合計表"
+          description: "驗證進銷存報表功能"
+          route: "/report/stock-flow"
+          priority: 3
+          steps-hint: "導航到 /report/stock-flow → 確認頁面載入"
+        - id: report-daily
+          name: "業務員日報表"
+          description: "驗證業務員日報表功能"
+          route: "/report/sales-daily"
+          priority: 3
+          steps-hint: "導航到 /report/sales-daily → 確認頁面載入"
 
-  # ----------------------------------------------------------
-  # 共用元件 / 核心邏輯
-  # ----------------------------------------------------------
-  - id: core
-    name: "共用核心邏輯"
-    critical: true
-    file-patterns:
-      - "**/views/layout/**"
-      - "**/views/HomeView*"
-      - "**/views/ErrorView*"
-      - "**/service/BaseCrud*"
-      - "**/service/CodeName*"
-      - "**/service/SysCode*"
-      - "**/config/**"
-      - "**/model/entity/base/**"
-    required-role: "ADMIN"
-    test-flows:
-      - id: core-home
-        name: "首頁載入"
-        description: "驗證首頁可正常載入，基本 UI 框架正確"
-        route: "/"
-        priority: 1
-        steps-hint: "導航到 / → 確認頁面載入 → 驗證主要 UI 元件存在"
+    # ----------------------------------------------------------
+    # 登入 / 安全性模組
+    # ----------------------------------------------------------
+    - id: auth
+      name: "登入與安全性"
+      critical: true
+      file-patterns:
+        - "**/views/LoginView*"
+        - "**/views/layout/MainLayout*"
+        - "**/security/**"
+        - "**/service/auth/Authentication*"
+        - "**/service/auth/Security*"
+        - "**/service/auth/JpaUserDetails*"
+        - "**/config/Security*"
+      required-role: "ADMIN"
+      test-flows:
+        - id: auth-login
+          name: "登入流程"
+          description: "驗證使用者可以正常登入系統，輸入帳號密碼後跳轉到首頁"
+          route: "/login"
+          priority: 1
+          steps-hint: "導航到 /login → 輸入帳號 → 輸入密碼 → 點擊登入 → 確認跳轉到首頁"
+        - id: auth-navigation
+          name: "側邊導航"
+          description: "驗證登入後側邊欄導航列正確顯示，各選單項目可點擊"
+          route: "/"
+          priority: 1
+          steps-hint: "確認側邊欄存在 → 驗證各分類選單顯示 → 點擊選單項目 → 確認頁面跳轉"
+
+    # ----------------------------------------------------------
+    # 共用元件 / 核心邏輯
+    # ----------------------------------------------------------
+    - id: core
+      name: "共用核心邏輯"
+      critical: true
+      file-patterns:
+        - "**/views/layout/**"
+        - "**/views/HomeView*"
+        - "**/views/ErrorView*"
+        - "**/service/BaseCrud*"
+        - "**/service/CodeName*"
+        - "**/service/SysCode*"
+        - "**/config/**"
+        - "**/model/entity/base/**"
+      required-role: "ADMIN"
+      test-flows:
+        - id: core-home
+          name: "首頁載入"
+          description: "驗證首頁可正常載入，基本 UI 框架正確"
+          route: "/"
+          priority: 1
+          steps-hint: "導航到 / → 確認頁面載入 → 驗證主要 UI 元件存在"
 
 # ============================================================
 # 部署觸發時的完整測試流程（critical=true 的模組）

@@ -117,8 +117,8 @@ public class PushWebhookController {
         // 分析受影響的模組
         Set<String> affectedModules = gitDiffAnalysisService.analyzeChangedFiles(changedFiles);
 
-        // 解析測試範圍
-        TestScope scope = testScopeResolver.resolveScope(affectedModules);
+        // 解析測試範圍（傳入 changedFiles 做 flow-level 精準匹配）
+        TestScope scope = testScopeResolver.resolveScope(affectedModules, changedFiles);
 
         // 建立 E2E 測試請求（branch 已在上方過濾時提取）
         E2ETestRequest request = E2ETestRequest.builder()
@@ -174,11 +174,12 @@ public class PushWebhookController {
         }
 
         // 分析受影響的模組
+        List<String> changedFiles = request.getChangedFiles();
         Set<String> affectedModules = gitDiffAnalysisService
-                .analyzeChangedFiles(request.getChangedFiles());
+                .analyzeChangedFiles(changedFiles);
 
-        // 解析測試範圍
-        TestScope scope = testScopeResolver.resolveScope(affectedModules);
+        // 解析測試範圍（傳入 changedFiles 做 flow-level 精準匹配）
+        TestScope scope = testScopeResolver.resolveScope(affectedModules, changedFiles);
 
         // 建立測試請求
         E2ETestRequest testRequest = E2ETestRequest.builder()
@@ -211,10 +212,11 @@ public class PushWebhookController {
     public ResponseEntity<Map<String, Object>> analyzeOnly(
             @RequestBody ManualPushRequest request) {
 
+        List<String> analyzeFiles = request.getChangedFiles();
         Set<String> affectedModules = gitDiffAnalysisService
-                .analyzeChangedFiles(request.getChangedFiles());
+                .analyzeChangedFiles(analyzeFiles);
 
-        TestScope scope = testScopeResolver.resolveScope(affectedModules);
+        TestScope scope = testScopeResolver.resolveScope(affectedModules, analyzeFiles);
 
         return ResponseEntity.ok(Map.of(
                 "affectedModules", new ArrayList<>(affectedModules),
