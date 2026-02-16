@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +25,7 @@ public class TeamsNotificationService {
     public TeamsNotificationService(@Value("${teams.webhook-url:}") String webhookUrl) {
         this.webhookUrl = webhookUrl;
         this.webClient = WebClient.create();
+        log.info("Teams webhook URL 長度：{}", webhookUrl != null ? webhookUrl.length() : 0);
     }
 
     /**
@@ -40,7 +42,7 @@ public class TeamsNotificationService {
         Map<String, Object> card = buildAdaptiveCard(result);
 
         return webClient.post()
-                .uri(webhookUrl)
+                .uri(URI.create(webhookUrl))
                 .bodyValue(card)
                 .retrieve()
                 .bodyToMono(Void.class)
@@ -76,7 +78,7 @@ public class TeamsNotificationService {
         log.info("正在發送 Teams E2E 測試通知...");
 
         return webClient.post()
-                .uri(webhookUrl)
+                .uri(URI.create(webhookUrl))
                 .bodyValue(payload)
                 .retrieve()
                 .bodyToMono(Void.class)

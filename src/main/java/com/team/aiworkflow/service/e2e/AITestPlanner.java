@@ -38,6 +38,7 @@ public class AITestPlanner {
                                          String pageContent, int maxSteps) {
         String prompt = String.format("""
                 You are a senior QA engineer planning E2E tests for a web application.
+                Your goal is to find REAL BUGS by actually performing user operations, not just checking if UI elements exist.
 
                 ## Application Info
                 - URL: %s
@@ -47,13 +48,23 @@ public class AITestPlanner {
                 %s
 
                 ## Your Task
-                Plan a series of test steps to verify the application works correctly.
-                Focus on CRITICAL user flows:
-                1. Can the user navigate to all main pages?
-                2. Can the user perform CRUD operations? (Create, Read, Update, Delete)
-                3. Do forms submit correctly?
-                4. Do buttons respond to clicks?
-                5. Does data appear/update after operations?
+                Plan a series of test steps that SIMULATE A REAL USER performing the described workflow.
+
+                CRITICAL RULES:
+                1. You MUST follow the test steps hint provided in the description above. The hint describes the exact user flow to test.
+                2. DO NOT just assert that elements exist. You must actually INTERACT with them (CLICK buttons, TYPE in inputs, SELECT options).
+                3. After performing a write operation (save, submit, create, update, delete), you MUST verify the RESULT:
+                   - Check for success/error notifications (e.g., vaadin-notification, .notification, [role='alert'])
+                   - Verify data actually changed (re-query and compare)
+                   - Check if the saved data appears correctly
+                4. A typical test flow should be:
+                   - Navigate/verify page loaded
+                   - Fill in required fields (TYPE, SELECT)
+                   - Click action button (save/submit/query)
+                   - WAIT for response
+                   - ASSERT the result (success message, data updated, error message if expected)
+                5. If the description mentions "儲存" (save), "送出" (submit), or similar write operations,
+                   you MUST include steps to perform that operation AND verify the outcome.
 
                 Generate a maximum of %d test steps.
 
@@ -61,21 +72,24 @@ public class AITestPlanner {
                 ```json
                 {
                   "steps": [
-                    {"action": "NAVIGATE", "target": "/", "description": "Navigate to home page"},
-                    {"action": "CLICK", "target": "button#add-new", "description": "Click add new button"},
-                    {"action": "ASSERT", "target": "form.create-form", "description": "Verify form appears"},
-                    {"action": "TYPE", "target": "input[name='name']", "value": "Test User", "description": "Enter name"},
-                    {"action": "CLICK", "target": "button[type='submit']", "description": "Submit the form"},
-                    {"action": "ASSERT", "target": ".success-message", "description": "Verify success message appears"}
+                    {"action": "NAVIGATE", "target": "/path", "description": "Navigate to target page"},
+                    {"action": "ASSERT", "target": "h2:has-text('Title')", "description": "Verify page loaded"},
+                    {"action": "CLICK", "target": "vaadin-button:has-text('查詢')", "description": "Click query button"},
+                    {"action": "WAIT", "target": "vaadin-grid", "description": "Wait for data to load"},
+                    {"action": "CLICK", "target": "vaadin-button:has-text('編輯')", "description": "Click edit to enable editing"},
+                    {"action": "TYPE", "target": "vaadin-integer-field", "value": "10", "description": "Enter order quantity"},
+                    {"action": "CLICK", "target": "vaadin-button:has-text('儲存')", "description": "Click save button"},
+                    {"action": "ASSERT", "target": "vaadin-notification", "description": "Verify save result notification appears"}
                   ]
                 }
                 ```
 
-                Rules for selectors:
-                - Prefer: id selectors (#btn-add), data-testid, name attributes
-                - Then: semantic selectors (button[type='submit'], a[href='/users'])
-                - Then: text content based (button:has-text('Save'))
+                Rules for selectors (Vaadin web components):
+                - Prefer: text content based (vaadin-button:has-text('儲存'), :has-text('查詢'))
+                - Then: semantic selectors (vaadin-text-field, vaadin-grid, vaadin-combo-box)
+                - Then: id selectors (#btn-add), data-testid, name attributes
                 - Avoid: fragile class-only selectors or nth-child
+                - For Vaadin apps: use vaadin-* tag names (vaadin-button, vaadin-text-field, vaadin-grid, etc.)
                 """,
                 appUrl, appDescription, pageContent, maxSteps);
 
