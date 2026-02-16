@@ -5,7 +5,7 @@ spring:
   application:
     name: ai-dev-workflow
 
-# Claude API Configuration
+# Claude API 設定
 claude:
   api-key: ${CLAUDE_API_KEY:your-api-key-here}
   model: claude-sonnet-4-5-20250929
@@ -13,49 +13,54 @@ claude:
   max-tokens: 4096
   timeout-seconds: 60
 
-# Azure DevOps Configuration
+# Azure DevOps 設定
 azure-devops:
   organization: ${AZURE_DEVOPS_ORG:your-org}
   project: ${AZURE_DEVOPS_PROJECT:your-project}
   pat: ${AZURE_DEVOPS_PAT:your-pat-here}
   base-url: https://dev.azure.com
 
-# Teams Notification
+# Teams 通知
 teams:
   webhook-url: ${TEAMS_WEBHOOK_URL:}
 
-# Rate Limiting
+# API 呼叫頻率限制
 rate-limit:
   claude-api:
     requests-per-minute: 10
     requests-per-hour: 100
 
-# Workflow Configuration
+# Playwright 瀏覽器設定（E2E 測試用）
+playwright:
+  # Chromium 執行檔路徑（Docker 中使用系統安裝的 Chromium，本機留空則自動下載）
+  chromium-path: ${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:}
+
+# 工作流程設定
 workflow:
   failure-analysis:
     enabled: true
-    # Only trigger on these branches (comma-separated)
+    # 僅在這些分支觸發（逗號分隔）
     branches: main,develop
-    # Max log lines to send to AI
+    # 送給 AI 分析的最大 log 行數
     max-log-lines: 500
   e2e-testing:
     enabled: false
-    # URL of the staging/dev environment to test
+    # 要測試的 staging/dev 環境 URL
     staging-url: ${E2E_STAGING_URL:}
-    # Description of the application (helps AI plan tests)
+    # 應用程式描述（幫助 AI 規劃測試步驟）
     app-description: ${E2E_APP_DESCRIPTION:}
-    # Max test steps per run
+    # 每次測試的最大步驟數
     max-steps: 30
-    # Timeout for entire test run (seconds)
+    # 整個測試的逾時時間（秒）
     timeout-seconds: 300
-    # Take screenshot after each step
+    # 每個步驟後截圖
     screenshot-each-step: true
   test-generation:
     enabled: false
   bug-fix:
     enabled: false
 
-# Actuator (health check)
+# 健康檢查端點
 management:
   endpoints:
     web:

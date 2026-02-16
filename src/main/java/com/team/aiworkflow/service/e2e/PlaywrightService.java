@@ -11,45 +11,45 @@ import org.springframework.stereotype.Service;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
-import java.util.UUID;
 
 /**
- * Wraps Playwright browser operations.
- * Manages browser lifecycle and provides methods for AI Agent to interact with pages.
+ * 封裝 Playwright 瀏覽器操作。
+ * 管理瀏覽器生命週期，並提供方法讓 AI Agent 與頁面互動。
  *
- * In Docker, set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH to use the system-installed Chromium.
+ * 在 Docker 中，透過 application.yml 的 playwright.chromium-path 設定系統安裝的 Chromium 路徑。
+ * 本機開發時留空，Playwright 會自動下載 Chromium。
  */
 @Service
 @Slf4j
 public class PlaywrightService {
 
-    @Value("${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:}")
+    @Value("${playwright.chromium-path:}")
     private String chromiumExecutablePath;
 
     private Playwright playwright;
     private Browser browser;
 
     /**
-     * Create a new browser session for an E2E test run.
-     * Returns a BrowserContext that can be used to create pages.
+     * 建立新的瀏覽器工作階段，用於 E2E 測試。
+     * 回傳 BrowserContext，可用來建立頁面。
      */
     public BrowserContext createSession() {
         if (playwright == null) {
-            log.info("Initializing Playwright...");
+            log.info("正在初始化 Playwright...");
             playwright = Playwright.create();
 
             BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
                     .setHeadless(true)
                     .setTimeout(30000);
 
-            // In Docker, use system-installed Chromium
+            // 在 Docker 中使用系統安裝的 Chromium
             if (chromiumExecutablePath != null && !chromiumExecutablePath.isBlank()) {
                 launchOptions.setExecutablePath(Paths.get(chromiumExecutablePath));
-                log.info("Using system Chromium: {}", chromiumExecutablePath);
+                log.info("使用系統 Chromium：{}", chromiumExecutablePath);
             }
 
             browser = playwright.chromium().launch(launchOptions);
-            log.info("Playwright browser launched (headless Chromium)");
+            log.info("Playwright 瀏覽器已啟動（headless Chromium）");
         }
 
         return browser.newContext(new Browser.NewContextOptions()
@@ -58,40 +58,40 @@ public class PlaywrightService {
     }
 
     /**
-     * Navigate to a URL.
+     * 導航到指定 URL。
      */
     public void navigate(Page page, String url) {
-        log.debug("Navigating to: {}", url);
+        log.debug("導航至：{}", url);
         page.navigate(url, new Page.NavigateOptions().setTimeout(15000));
         page.waitForLoadState(LoadState.NETWORKIDLE);
     }
 
     /**
-     * Click an element by selector.
+     * 透過 CSS 選擇器點擊元素。
      */
     public void click(Page page, String selector) {
-        log.debug("Clicking: {}", selector);
+        log.debug("點擊：{}", selector);
         page.locator(selector).first().click(new Locator.ClickOptions().setTimeout(5000));
     }
 
     /**
-     * Type text into an input element.
+     * 在輸入欄位中填入文字。
      */
     public void type(Page page, String selector, String text) {
-        log.debug("Typing '{}' into: {}", text, selector);
+        log.debug("在 {} 輸入 '{}'", selector, text);
         page.locator(selector).first().fill(text);
     }
 
     /**
-     * Select an option from a dropdown.
+     * 從下拉選單中選擇選項。
      */
     public void select(Page page, String selector, String value) {
-        log.debug("Selecting '{}' in: {}", value, selector);
+        log.debug("在 {} 選擇 '{}'", selector, value);
         page.locator(selector).first().selectOption(value);
     }
 
     /**
-     * Take a screenshot and return the file path.
+     * 截圖並回傳檔案路徑。
      */
     public String takeScreenshot(Page page, String testRunId, int stepNumber) {
         String filename = String.format("e2e-%s-step%d.png", testRunId, stepNumber);
@@ -102,12 +102,12 @@ public class PlaywrightService {
                 .setPath(screenshotPath)
                 .setFullPage(true));
 
-        log.debug("Screenshot saved: {}", screenshotPath);
+        log.debug("截圖已儲存：{}", screenshotPath);
         return screenshotPath.toString();
     }
 
     /**
-     * Take a screenshot and return as Base64 string (for sending to Claude Vision API).
+     * 截圖並回傳 Base64 字串（用於傳送給 Claude Vision API）。
      */
     public String takeScreenshotAsBase64(Page page) {
         byte[] bytes = page.screenshot(new Page.ScreenshotOptions().setFullPage(false));
@@ -115,16 +115,16 @@ public class PlaywrightService {
     }
 
     /**
-     * Get the page's accessibility tree as text.
-     * This is what AI uses to understand the page structure.
+     * 取得頁面的無障礙樹狀結構（文字內容 + 互動元素）。
+     * AI 透過這些資訊理解頁面結構並決定操作。
      */
     public String getAccessibilityTree(Page page) {
-        // Use Playwright's accessibility snapshot
+        // 取得頁面文字內容
         String tree = page.locator("body").evaluate(
                 "el => el.innerText"
         ).toString();
 
-        // Also get all interactive elements
+        // 取得所有互動元素（按鈕、連結、輸入框等）
         String interactiveElements = page.evaluate("""
             () => {
                 const elements = [];
@@ -147,10 +147,10 @@ public class PlaywrightService {
         """).toString();
 
         return String.format("""
-                == Page Text Content ==
+                == 頁面文字內容 ==
                 %s
 
-                == Interactive Elements ==
+                == 互動元素 ==
                 %s
                 """,
                 truncate(tree, 3000),
@@ -158,7 +158,7 @@ public class PlaywrightService {
     }
 
     /**
-     * Get console errors from the page.
+     * 取得頁面的 console 錯誤訊息。
      */
     public String getConsoleErrors(Page page) {
         StringBuilder errors = new StringBuilder();
@@ -167,34 +167,34 @@ public class PlaywrightService {
                 errors.append(msg.text()).append("\n");
             }
         });
-        // Trigger a small wait to collect any pending console messages
+        // 等待一小段時間以收集待處理的 console 訊息
         page.waitForTimeout(500);
         return errors.toString();
     }
 
     /**
-     * Get the current page URL.
+     * 取得目前頁面的 URL。
      */
     public String getCurrentUrl(Page page) {
         return page.url();
     }
 
     /**
-     * Get the page title.
+     * 取得頁面標題。
      */
     public String getPageTitle(Page page) {
         return page.title();
     }
 
     /**
-     * Check if an element exists on the page.
+     * 檢查頁面上是否存在指定元素。
      */
     public boolean elementExists(Page page, String selector) {
         return page.locator(selector).count() > 0;
     }
 
     /**
-     * Wait for an element to appear.
+     * 等待指定元素出現。
      */
     public boolean waitForElement(Page page, String selector, int timeoutMs) {
         try {
@@ -207,7 +207,8 @@ public class PlaywrightService {
     }
 
     /**
-     * Execute a single test step on the page.
+     * 執行單一測試步驟。
+     * 根據步驟的 Action 類型執行對應的瀏覽器操作，並在每步後截圖。
      */
     public TestStep executeStep(Page page, TestStep step, String testRunId) {
         long start = System.currentTimeMillis();
@@ -223,20 +224,20 @@ public class PlaywrightService {
                 case ASSERT -> {
                     boolean exists = elementExists(page, step.getTarget());
                     if (!exists) {
-                        throw new AssertionError("Element not found: " + step.getTarget());
+                        throw new AssertionError("找不到元素：" + step.getTarget());
                     }
                 }
-                case SCREENSHOT -> { /* screenshot taken below */ }
+                case SCREENSHOT -> { /* 截圖在下方統一處理 */ }
             }
 
             step.setStatus(TestStep.StepStatus.PASSED);
         } catch (Exception e) {
             step.setStatus(TestStep.StepStatus.FAILED);
             step.setErrorMessage(e.getMessage());
-            log.warn("Step {} failed: {}", step.getStepNumber(), e.getMessage());
+            log.warn("步驟 {} 失敗：{}", step.getStepNumber(), e.getMessage());
         }
 
-        // Always take a screenshot after each step
+        // 每個步驟執行後都截圖記錄
         String screenshotPath = takeScreenshot(page, testRunId, step.getStepNumber());
         step.setScreenshotPath(screenshotPath);
         step.setDurationMs(System.currentTimeMillis() - start);
@@ -244,6 +245,9 @@ public class PlaywrightService {
         return step;
     }
 
+    /**
+     * 清理 Playwright 資源（應用程式關閉時自動呼叫）。
+     */
     @PreDestroy
     public void cleanup() {
         if (browser != null) {
@@ -252,9 +256,12 @@ public class PlaywrightService {
         if (playwright != null) {
             playwright.close();
         }
-        log.info("Playwright resources cleaned up");
+        log.info("Playwright 資源已清理");
     }
 
+    /**
+     * 截斷文字至指定長度。
+     */
     private String truncate(String text, int maxLength) {
         if (text == null) return "";
         return text.length() > maxLength ? text.substring(0, maxLength) + "..." : text;

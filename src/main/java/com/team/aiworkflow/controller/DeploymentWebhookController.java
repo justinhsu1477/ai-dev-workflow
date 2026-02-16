@@ -13,14 +13,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 /**
- * Receives Azure DevOps "Release deployment completed" Service Hook events.
- * Triggers AI E2E testing after a successful deployment to staging/dev.
+ * 接收 Azure DevOps「部署完成」Service Hook 事件。
+ * 成功部署到 staging/dev 環境後，自動觸發 AI E2E 測試。
  *
- * Setup:
+ * 設定步驟：
  * 1. Azure DevOps → Project Settings → Service Hooks
- * 2. Create Subscription → Web Hooks
- * 3. Trigger: "Release deployment completed" with Status = Succeeded
- * 4. URL: https://your-app/webhook/deployment-completed
+ * 2. 建立 Subscription → Web Hooks
+ * 3. 觸發條件：「Release deployment completed」且 Status = Succeeded
+ * 4. URL：https://your-app/webhook/deployment-completed
  */
 @RestController
 @RequestMapping("/webhook")
@@ -40,25 +40,25 @@ public class DeploymentWebhookController {
     private String defaultAppDescription;
 
     /**
-     * Receive deployment completed event from Azure DevOps.
+     * 接收 Azure DevOps 的部署完成事件，觸發 E2E 測試。
      */
     @PostMapping("/deployment-completed")
     public ResponseEntity<Map<String, String>> handleDeploymentCompleted(
             @RequestBody(required = false) DeploymentEvent event) {
 
-        log.info("Received deployment completed event");
+        log.info("收到部署完成事件");
 
         if (!e2eTestingEnabled) {
             return ResponseEntity.ok(Map.of("status", "disabled"));
         }
 
         if (defaultStagingUrl == null || defaultStagingUrl.isBlank()) {
-            log.warn("E2E testing enabled but staging URL not configured");
+            log.warn("E2E 測試已啟用，但未設定 staging URL");
             return ResponseEntity.ok(Map.of("status", "error",
-                    "message", "staging-url not configured"));
+                    "message", "staging-url 未設定"));
         }
 
-        // Build E2E test request
+        // 建立 E2E 測試請求
         E2ETestRequest request = E2ETestRequest.builder()
                 .appUrl(defaultStagingUrl)
                 .appDescription(defaultAppDescription)
@@ -68,30 +68,31 @@ public class DeploymentWebhookController {
                         ? event.getResource().getEnvironmentName() : "staging")
                 .maxSteps(30)
                 .timeoutSeconds(300)
+                .triggeredBy("deployment-webhook")
                 .build();
 
         orchestrator.runTestAsync(request);
 
         return ResponseEntity.ok(Map.of(
                 "status", "accepted",
-                "message", "E2E test triggered for " + defaultStagingUrl));
+                "message", "E2E 測試已觸發：" + defaultStagingUrl));
     }
 
     /**
-     * DTO for Azure DevOps Release Deployment event.
+     * Azure DevOps Release Deployment 事件 DTO。
      */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class DeploymentEvent {
-        private String eventType;
+        private String eventType;       // 事件類型
         private DeploymentResource resource;
 
         @Data
         @JsonIgnoreProperties(ignoreUnknown = true)
         public static class DeploymentResource {
-            private String releaseName;
-            private String environmentName;
-            private String status;
+            private String releaseName;       // Release 名稱
+            private String environmentName;   // 部署環境名稱
+            private String status;            // 部署狀態
         }
     }
 }

@@ -1,11 +1,11 @@
-# Development environment configuration
-# Usage: java -jar app.jar --spring.profiles.active=dev
-# Or set: SPRING_PROFILES_ACTIVE=dev
+# 開發環境設定
+# 使用方式：java -jar app.jar --spring.profiles.active=dev
+# 或設定環境變數：SPRING_PROFILES_ACTIVE=dev
 
 server:
   port: 8080
 
-# In development, you can set these directly or via environment variables
+# 開發環境可直接設定或透過環境變數注入
 claude:
   api-key: ${CLAUDE_API_KEY:your-dev-api-key}
   model: claude-sonnet-4-5-20250929
@@ -20,7 +20,7 @@ azure-devops:
 teams:
   webhook-url: ${TEAMS_WEBHOOK_URL:}
 
-# Relaxed rate limits for development
+# 開發環境較寬鬆的頻率限制
 rate-limit:
   claude-api:
     requests-per-minute: 20
@@ -38,7 +38,7 @@ workflow:
     max-steps: 20
     timeout-seconds: 180
 
-# More detailed logging in dev
+# 開發環境詳細日誌
 logging:
   level:
     com.team.aiworkflow: DEBUG

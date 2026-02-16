@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Request to trigger an AI E2E test run.
+ * 觸發 AI E2E 測試的請求物件。
  */
 @Data
 @Builder
@@ -14,11 +14,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class E2ETestRequest {
 
-    private String appUrl;           // URL of the deployed application to test
-    private String appDescription;   // Description of what the app does (helps AI plan tests)
-    private String buildNumber;      // Optional: build number that triggered this
-    private String branch;           // Optional: branch name
-    private int maxSteps;            // Max test steps (default 30)
-    private int timeoutSeconds;      // Max time for entire test run (default 300)
-    private String triggeredBy;      // "manual", "deployment-webhook", etc.
+    private String appUrl;           // 要測試的已部署應用程式 URL
+    private String appDescription;   // 應用程式功能描述（幫助 AI 規劃測試）
+    private String buildNumber;      // 選填：觸發此測試的 Build 編號
+    private String branch;           // 選填：分支名稱
+    private int maxSteps;            // 最大測試步驟數（預設 30）
+    private int timeoutSeconds;      // 整個測試的逾時時間，秒（預設 300）
+    private String triggeredBy;      // 觸發方式："manual"、"deployment-webhook" 等
 }

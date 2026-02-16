@@ -1,5 +1,5 @@
-# Production environment configuration
-# All secrets should come from Azure Key Vault or environment variables
+# 生產環境設定
+# 所有機密值應來自 Azure Key Vault 或環境變數
 
 server:
   port: 8080
@@ -19,7 +19,7 @@ azure-devops:
 teams:
   webhook-url: ${TEAMS_WEBHOOK_URL}
 
-# Strict rate limits for production
+# 生產環境嚴格頻率限制
 rate-limit:
   claude-api:
     requests-per-minute: 10

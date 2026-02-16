@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team.aiworkflow.model.e2e.TestStep;
 import com.team.aiworkflow.service.claude.ClaudeApiService;
-import com.team.aiworkflow.service.claude.ResponseParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -14,8 +13,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Uses Claude API to plan E2E test steps based on the application description
- * and current page state. The AI acts as a QA engineer deciding what to test.
+ * 透過 Claude API 規劃 E2E 測試步驟。
+ * AI 扮演 QA 工程師角色，根據應用程式描述和當前頁面狀態決定要測試什麼。
  */
 @Service
 @Slf4j
@@ -26,8 +25,14 @@ public class AITestPlanner {
     private final ObjectMapper objectMapper;
 
     /**
-     * Generate initial test plan based on app description.
-     * AI decides what user flows to test (e.g., CRUD operations).
+     * 根據應用程式描述產生初始測試計畫。
+     * AI 決定要測試哪些使用者流程（例如 CRUD 操作）。
+     *
+     * @param appUrl         應用程式 URL
+     * @param appDescription 應用程式功能描述
+     * @param pageContent    當前頁面內容（無障礙樹 + 互動元素）
+     * @param maxSteps       最大測試步驟數
+     * @return 規劃好的測試步驟清單
      */
     public List<TestStep> planTestSteps(String appUrl, String appDescription,
                                          String pageContent, int maxSteps) {
@@ -78,14 +83,21 @@ public class AITestPlanner {
             String response = claudeApiService.analyze(prompt).block();
             return parseTestSteps(response);
         } catch (Exception e) {
-            log.error("Failed to plan test steps: {}", e.getMessage());
+            log.error("規劃測試步驟失敗：{}", e.getMessage());
             return getDefaultTestSteps(appUrl);
         }
     }
 
     /**
-     * Ask AI to decide the next action based on current page state.
-     * Used in adaptive testing mode where AI decides step-by-step.
+     * 根據當前頁面狀態，請 AI 決定下一步操作。
+     * 用於自適應測試模式，AI 逐步決定下一個動作。
+     *
+     * @param appUrl         應用程式 URL
+     * @param pageContent    當前頁面內容
+     * @param consoleErrors  console 錯誤訊息
+     * @param completedSteps 已完成的步驟
+     * @param objective      當前測試目標
+     * @return 下一個測試步驟，若測試完成則回傳 null
      */
     public TestStep planNextStep(String appUrl, String pageContent,
                                   String consoleErrors, List<TestStep> completedSteps,
@@ -139,11 +151,14 @@ public class AITestPlanner {
             String response = claudeApiService.analyze(prompt).block();
             return parseNextStep(response, completedSteps.size() + 1);
         } catch (Exception e) {
-            log.error("Failed to plan next step: {}", e.getMessage());
+            log.error("規劃下一步失敗：{}", e.getMessage());
             return null;
         }
     }
 
+    /**
+     * 解析 AI 回傳的測試步驟 JSON。
+     */
     @SuppressWarnings("unchecked")
     private List<TestStep> parseTestSteps(String aiResponse) {
         try {
@@ -163,22 +178,25 @@ public class AITestPlanner {
                         .status(TestStep.StepStatus.PLANNED)
                         .build());
             }
-            log.info("AI planned {} test steps", steps.size());
+            log.info("AI 規劃了 {} 個測試步驟", steps.size());
             return steps;
 
         } catch (Exception e) {
-            log.error("Failed to parse test steps from AI response: {}", e.getMessage());
+            log.error("解析 AI 測試步驟失敗：{}", e.getMessage());
             return List.of();
         }
     }
 
+    /**
+     * 解析 AI 回傳的單一步驟 JSON。
+     */
     private TestStep parseNextStep(String aiResponse, int stepNumber) {
         try {
             String json = extractJson(aiResponse);
             Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<>() {});
 
             String action = ((String) parsed.get("action")).toUpperCase();
-            if ("DONE".equals(action)) return null; // Testing complete
+            if ("DONE".equals(action)) return null; // 測試完成
 
             return TestStep.builder()
                     .stepNumber(stepNumber)
@@ -190,13 +208,15 @@ public class AITestPlanner {
                     .build();
 
         } catch (Exception e) {
-            log.error("Failed to parse next step: {}", e.getMessage());
+            log.error("解析下一步失敗：{}", e.getMessage());
             return null;
         }
     }
 
+    /**
+     * 從 markdown code block 或原始文字中擷取 JSON。
+     */
     private String extractJson(String text) {
-        // Extract JSON from markdown code block or raw text
         int start = text.indexOf("```json");
         if (start >= 0) {
             start = text.indexOf('\n', start) + 1;
@@ -212,8 +232,8 @@ public class AITestPlanner {
     }
 
     /**
-     * Default test steps when AI planning fails.
-     * Basic smoke test: just navigate and check the page loads.
+     * AI 規劃失敗時的預設測試步驟。
+     * 基本冒煙測試：導航到首頁並確認頁面載入。
      */
     private List<TestStep> getDefaultTestSteps(String appUrl) {
         return List.of(
@@ -221,14 +241,14 @@ public class AITestPlanner {
                         .stepNumber(1)
                         .action(TestStep.Action.NAVIGATE)
                         .target(appUrl)
-                        .description("Navigate to application home page")
+                        .description("導航到應用程式首頁")
                         .status(TestStep.StepStatus.PLANNED)
                         .build(),
                 TestStep.builder()
                         .stepNumber(2)
                         .action(TestStep.Action.ASSERT)
                         .target("body")
-                        .description("Verify page body is present")
+                        .description("驗證頁面 body 存在")
                         .status(TestStep.StepStatus.PLANNED)
                         .build()
         );

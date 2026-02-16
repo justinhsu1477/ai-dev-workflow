@@ -12,9 +12,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 /**
- * Controller for AI E2E testing endpoints.
+ * AI E2E 測試 API 端點。
+ * 提供手動觸發和同步執行兩種模式。
  *
- * Provides both webhook-triggered and manual-triggered E2E test runs.
+ * 端點：
+ * - POST /api/e2e/run      非同步執行（立即回傳，背景執行）
+ * - POST /api/e2e/run-sync  同步執行（等待完成後回傳完整結果）
  */
 @RestController
 @RequestMapping("/api/e2e")
@@ -28,13 +31,13 @@ public class E2ETestController {
     private boolean e2eTestingEnabled;
 
     /**
-     * Manually trigger an AI E2E test run.
+     * 手動觸發 AI E2E 測試（非同步）。
      *
-     * Example:
+     * 範例請求：
      * POST /api/e2e/run
      * {
      *   "appUrl": "https://staging.myapp.com",
-     *   "appDescription": "CRUD user management system with create, edit, delete",
+     *   "appDescription": "CRUD 使用者管理系統，支援新增、編輯、刪除",
      *   "maxSteps": 20,
      *   "timeoutSeconds": 180
      * }
@@ -43,13 +46,13 @@ public class E2ETestController {
     public ResponseEntity<Map<String, String>> runTest(@RequestBody E2ETestRequest request) {
         if (!e2eTestingEnabled) {
             return ResponseEntity.ok(Map.of("status", "disabled",
-                    "message", "E2E testing is not enabled"));
+                    "message", "E2E 測試功能未啟用"));
         }
 
-        log.info("Manual E2E test requested for: {}", request.getAppUrl());
+        log.info("收到手動 E2E 測試請求：{}", request.getAppUrl());
 
         if (request.getAppUrl() == null || request.getAppUrl().isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "appUrl is required"));
+            return ResponseEntity.badRequest().body(Map.of("error", "appUrl 為必填欄位"));
         }
 
         request.setTriggeredBy("manual");
@@ -57,23 +60,23 @@ public class E2ETestController {
 
         return ResponseEntity.ok(Map.of(
                 "status", "accepted",
-                "message", "E2E test started for " + request.getAppUrl()));
+                "message", "E2E 測試已啟動：" + request.getAppUrl()));
     }
 
     /**
-     * Trigger E2E test synchronously and return full results.
-     * Use this for testing/debugging the E2E module itself.
+     * 同步觸發 E2E 測試並回傳完整結果。
+     * 適用於測試/除錯 E2E 模組本身。
      */
     @PostMapping("/run-sync")
     public ResponseEntity<E2ETestResult> runTestSync(@RequestBody E2ETestRequest request) {
         if (!e2eTestingEnabled) {
             return ResponseEntity.ok(E2ETestResult.builder()
-                    .summary("E2E testing is not enabled")
+                    .summary("E2E 測試功能未啟用")
                     .status(E2ETestResult.TestRunStatus.ERROR)
                     .build());
         }
 
-        log.info("Sync E2E test requested for: {}", request.getAppUrl());
+        log.info("收到同步 E2E 測試請求：{}", request.getAppUrl());
         E2ETestResult result = orchestrator.runTest(request);
         return ResponseEntity.ok(result);
     }

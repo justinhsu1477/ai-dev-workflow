@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Represents a single E2E test step planned or executed by the AI Agent.
+ * 代表由 AI Agent 規劃或執行的單一 E2E 測試步驟。
  */
 @Data
 @Builder
@@ -14,31 +14,37 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class TestStep {
 
-    private int stepNumber;
-    private Action action;
-    private String target;       // CSS selector, URL, or input value
-    private String value;        // For type actions: the text to type
-    private String description;  // Human-readable description of this step
-    private StepStatus status;
-    private String screenshotPath;
-    private String errorMessage;
-    private long durationMs;
+    private int stepNumber;          // 步驟編號
+    private Action action;           // 操作類型
+    private String target;           // CSS 選擇器、URL 或輸入值
+    private String value;            // TYPE 操作時要輸入的文字
+    private String description;      // 步驟的人類可讀描述
+    private StepStatus status;       // 步驟狀態
+    private String screenshotPath;   // 截圖檔案路徑
+    private String errorMessage;     // 失敗時的錯誤訊息
+    private long durationMs;         // 執行耗時（毫秒）
 
+    /**
+     * 測試步驟的操作類型。
+     */
     public enum Action {
-        NAVIGATE,   // Go to a URL
-        CLICK,      // Click an element
-        TYPE,       // Type text into an input
-        SELECT,     // Select an option from dropdown
-        ASSERT,     // Verify something on the page
-        WAIT,       // Wait for an element or condition
-        SCREENSHOT  // Take a screenshot
+        NAVIGATE,   // 導航到 URL
+        CLICK,      // 點擊元素
+        TYPE,       // 在輸入框中填入文字
+        SELECT,     // 從下拉選單選擇選項
+        ASSERT,     // 驗證頁面上的某個條件
+        WAIT,       // 等待元素出現
+        SCREENSHOT  // 截圖
     }
 
+    /**
+     * 測試步驟的執行狀態。
+     */
     public enum StepStatus {
-        PLANNED,    // Step is planned but not executed
-        RUNNING,    // Step is currently executing
-        PASSED,     // Step executed successfully
-        FAILED,     // Step failed (possible bug found)
-        SKIPPED     // Step was skipped
+        PLANNED,    // 已規劃，尚未執行
+        RUNNING,    // 正在執行中
+        PASSED,     // 執行成功
+        FAILED,     // 執行失敗（可能發現 bug）
+        SKIPPED     // 已跳過
     }
 }

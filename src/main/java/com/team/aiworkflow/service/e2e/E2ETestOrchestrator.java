@@ -18,9 +18,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Orchestrates the complete AI E2E test flow:
- * 1. Launch browser → 2. AI plans test steps → 3. Execute steps →
- * 4. Detect bugs → 5. Create Work Items → 6. Notify team
+ * E2E 測試流程編排器。
+ * 完整流程：
+ * 1. 啟動瀏覽器 → 2. AI 規劃測試步驟 → 3. 逐步執行 →
+ * 4. 偵測 bug → 5. 建立 Work Item → 6. 通知團隊
  */
 @Service
 @Slf4j
@@ -33,23 +34,23 @@ public class E2ETestOrchestrator {
     private final TeamsNotificationService teamsNotificationService;
 
     /**
-     * Run an AI E2E test asynchronously.
-     * This is the main entry point triggered by deployment webhook or manual API.
+     * 非同步執行 AI E2E 測試。
+     * 由部署 webhook 或手動 API 觸發的主要進入點。
      */
     @Async("aiTaskExecutor")
     public void runTestAsync(E2ETestRequest request) {
-        log.info("Starting async E2E test for: {}", request.getAppUrl());
+        log.info("啟動非同步 E2E 測試：{}", request.getAppUrl());
         E2ETestResult result = runTest(request);
-        log.info("E2E test completed: {} - {} bugs found",
+        log.info("E2E 測試完成：{} - 發現 {} 個 bug",
                 result.getStatus(), result.getBugsFound().size());
     }
 
     /**
-     * Run an AI E2E test synchronously and return the result.
+     * 同步執行 AI E2E 測試並回傳結果。
      */
     public E2ETestResult runTest(E2ETestRequest request) {
         String testRunId = UUID.randomUUID().toString().substring(0, 8);
-        log.info("E2E Test Run [{}] starting for: {}", testRunId, request.getAppUrl());
+        log.info("E2E 測試 [{}] 開始：{}", testRunId, request.getAppUrl());
 
         E2ETestResult result = E2ETestResult.builder()
                 .testRunId(testRunId)
@@ -72,17 +73,17 @@ public class E2ETestOrchestrator {
         Page page = null;
 
         try {
-            // Step 1: Launch browser
+            // 步驟 1：啟動瀏覽器
             context = playwrightService.createSession();
             page = context.newPage();
-            log.info("[{}] Browser session created", testRunId);
+            log.info("[{}] 瀏覽器工作階段已建立", testRunId);
 
-            // Step 2: Navigate to app and get initial page state
+            // 步驟 2：導航到應用程式並取得初始頁面狀態
             playwrightService.navigate(page, request.getAppUrl());
             String initialPageContent = playwrightService.getAccessibilityTree(page);
-            log.info("[{}] Initial page loaded, planning test steps...", testRunId);
+            log.info("[{}] 初始頁面已載入，正在規劃測試步驟...", testRunId);
 
-            // Step 3: AI plans test steps
+            // 步驟 3：AI 規劃測試步驟
             List<TestStep> plannedSteps = aiTestPlanner.planTestSteps(
                     request.getAppUrl(),
                     request.getAppDescription(),
@@ -90,30 +91,30 @@ public class E2ETestOrchestrator {
                     maxSteps);
 
             if (plannedSteps.isEmpty()) {
-                log.warn("[{}] AI returned no test steps", testRunId);
+                log.warn("[{}] AI 未回傳任何測試步驟", testRunId);
                 result.setStatus(E2ETestResult.TestRunStatus.ERROR);
-                result.setSummary("AI failed to plan test steps");
+                result.setSummary("AI 規劃測試步驟失敗");
                 return result;
             }
 
-            log.info("[{}] AI planned {} test steps", testRunId, plannedSteps.size());
+            log.info("[{}] AI 規劃了 {} 個測試步驟", testRunId, plannedSteps.size());
 
-            // Step 4: Execute each step
+            // 步驟 4：逐步執行
             int passedCount = 0;
             int failedCount = 0;
 
             for (TestStep step : plannedSteps) {
-                // Check timeout
+                // 檢查是否逾時
                 if (System.currentTimeMillis() > deadline) {
-                    log.warn("[{}] Test run timed out at step {}", testRunId, step.getStepNumber());
+                    log.warn("[{}] 測試在步驟 {} 逾時", testRunId, step.getStepNumber());
                     result.setStatus(E2ETestResult.TestRunStatus.TIMEOUT);
                     break;
                 }
 
-                log.info("[{}] Executing step {}: {} - {}",
+                log.info("[{}] 執行步驟 {}：{} - {}",
                         testRunId, step.getStepNumber(), step.getAction(), step.getDescription());
 
-                // Execute the step
+                // 執行步驟
                 TestStep executedStep = playwrightService.executeStep(page, step, testRunId);
                 result.getSteps().add(executedStep);
 
@@ -126,14 +127,14 @@ public class E2ETestOrchestrator {
                 } else if (executedStep.getStatus() == TestStep.StepStatus.FAILED) {
                     failedCount++;
 
-                    // Step 5: Analyze the failure - is it a bug?
+                    // 步驟 5：分析失敗原因 — 是否為 bug？
                     String consoleErrors = playwrightService.getConsoleErrors(page);
                     String currentUrl = playwrightService.getCurrentUrl(page);
 
                     E2ETestResult.BugFound bug = E2ETestResult.BugFound.builder()
                             .title(String.format("[E2E] %s", executedStep.getDescription()))
                             .description(String.format(
-                                    "Step %d failed: %s\nAction: %s on '%s'\nError: %s",
+                                    "步驟 %d 失敗：%s\n操作：%s 目標 '%s'\n錯誤：%s",
                                     executedStep.getStepNumber(),
                                     executedStep.getDescription(),
                                     executedStep.getAction(),
@@ -149,11 +150,11 @@ public class E2ETestOrchestrator {
                             .build();
 
                     result.getBugsFound().add(bug);
-                    log.warn("[{}] Bug found at step {}: {}", testRunId, step.getStepNumber(), bug.getTitle());
+                    log.warn("[{}] 在步驟 {} 發現 bug：{}", testRunId, step.getStepNumber(), bug.getTitle());
                 }
             }
 
-            // Set final status
+            // 設定最終狀態
             result.setTotalSteps(plannedSteps.size());
             result.setPassedSteps(passedCount);
             result.setFailedSteps(failedCount);
@@ -165,15 +166,15 @@ public class E2ETestOrchestrator {
             }
 
             result.setSummary(String.format(
-                    "E2E Test: %d/%d steps passed, %d bugs found",
+                    "E2E 測試：%d/%d 步驟通過，發現 %d 個 bug",
                     passedCount, plannedSteps.size(), result.getBugsFound().size()));
 
         } catch (Exception e) {
-            log.error("[{}] E2E test run failed: {}", testRunId, e.getMessage(), e);
+            log.error("[{}] E2E 測試執行失敗：{}", testRunId, e.getMessage(), e);
             result.setStatus(E2ETestResult.TestRunStatus.ERROR);
-            result.setSummary("Test run error: " + e.getMessage());
+            result.setSummary("測試執行錯誤：" + e.getMessage());
         } finally {
-            // Cleanup browser
+            // 清理瀏覽器資源
             if (page != null) page.close();
             if (context != null) context.close();
         }
@@ -182,16 +183,19 @@ public class E2ETestOrchestrator {
         result.setTotalDurationMs(
                 java.time.Duration.between(result.getStartedAt(), result.getCompletedAt()).toMillis());
 
-        // Step 6: Create Work Items for bugs and notify
+        // 步驟 6：為發現的 bug 建立 Work Item 並通知團隊
         createWorkItemsForBugs(result);
         notifyTeam(result);
 
-        log.info("[{}] E2E test completed in {}ms: {}",
+        log.info("[{}] E2E 測試完成，耗時 {}ms：{}",
                 testRunId, result.getTotalDurationMs(), result.getSummary());
 
         return result;
     }
 
+    /**
+     * 為每個發現的 bug 建立 Azure DevOps Work Item。
+     */
     private void createWorkItemsForBugs(E2ETestResult result) {
         for (E2ETestResult.BugFound bug : result.getBugsFound()) {
             try {
@@ -200,7 +204,7 @@ public class E2ETestOrchestrator {
                                 .buildNumber(result.getBuildNumber())
                                 .branch(result.getBranch())
                                 .rootCause(bug.getDescription())
-                                .suggestedFix("Investigate the failed E2E step: " + bug.getExpectedBehavior())
+                                .suggestedFix("調查失敗的 E2E 步驟：" + bug.getExpectedBehavior())
                                 .severity(mapSeverity(bug.getSeverity()))
                                 .summary(bug.getTitle())
                                 .build();
@@ -208,14 +212,17 @@ public class E2ETestOrchestrator {
                 Integer workItemId = workItemService.createBugFromAnalysis(analysisResult).block();
                 if (workItemId != null) {
                     bug.setWorkItemId(workItemId);
-                    log.info("Created Work Item #{} for E2E bug: {}", workItemId, bug.getTitle());
+                    log.info("已建立 Work Item #{} - E2E bug：{}", workItemId, bug.getTitle());
                 }
             } catch (Exception e) {
-                log.error("Failed to create Work Item for bug: {}", bug.getTitle(), e);
+                log.error("建立 Work Item 失敗：{}", bug.getTitle(), e);
             }
         }
     }
 
+    /**
+     * 透過 Teams 通知團隊測試結果。
+     */
     private void notifyTeam(E2ETestResult result) {
         String emoji = switch (result.getStatus()) {
             case PASSED -> "✅";
@@ -225,9 +232,9 @@ public class E2ETestOrchestrator {
         };
 
         String message = String.format(
-                "%s **E2E Test Report** - Build #%s\n\n%s\n\nSteps: %d/%d passed | Bugs found: %d",
+                "%s **E2E 測試報告** - Build #%s\n\n%s\n\n步驟：%d/%d 通過 | 發現 bug：%d 個",
                 emoji,
-                result.getBuildNumber() != null ? result.getBuildNumber() : "manual",
+                result.getBuildNumber() != null ? result.getBuildNumber() : "手動觸發",
                 result.getSummary(),
                 result.getPassedSteps(),
                 result.getTotalSteps(),
@@ -236,8 +243,11 @@ public class E2ETestOrchestrator {
         teamsNotificationService.sendSimpleMessage(message).subscribe();
     }
 
+    /**
+     * 根據失敗步驟的操作類型判斷嚴重程度。
+     * CLICK/NAVIGATE 失敗代表使用者無法執行關鍵操作，嚴重程度較高。
+     */
     private String determineSeverity(TestStep failedStep) {
-        // CLICK or NAVIGATE failures are higher severity (user can't perform actions)
         return switch (failedStep.getAction()) {
             case CLICK, NAVIGATE -> "HIGH";
             case TYPE, SELECT -> "MEDIUM";
@@ -246,6 +256,9 @@ public class E2ETestOrchestrator {
         };
     }
 
+    /**
+     * 將字串嚴重程度轉換為 AnalysisResult.Severity 列舉。
+     */
     private com.team.aiworkflow.model.AnalysisResult.Severity mapSeverity(String severity) {
         try {
             return com.team.aiworkflow.model.AnalysisResult.Severity.valueOf(severity);
