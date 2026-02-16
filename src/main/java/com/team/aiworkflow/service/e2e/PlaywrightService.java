@@ -28,6 +28,9 @@ public class PlaywrightService {
     @Value("${playwright.headless:true}")
     private boolean headless;
 
+    @Value("${e2e.staging-url:http://localhost:8080}")
+    private String stagingUrl;
+
     private Playwright playwright;
     private Browser browser;
 
@@ -61,19 +64,54 @@ public class PlaywrightService {
 
     /**
      * 導航到指定 URL。
+     * 如果傳入的是相對路徑（以 "/" 開頭但不含 "://"），自動加上 stagingUrl 作為 base。
      */
     public void navigate(Page page, String url) {
-        log.debug("導航至：{}", url);
-        page.navigate(url, new Page.NavigateOptions().setTimeout(15000));
+        String fullUrl = url;
+        if (url != null && url.startsWith("/") && !url.contains("://")) {
+            fullUrl = stagingUrl.replaceAll("/+$", "") + url;
+            log.debug("相對路徑轉完整 URL：{} → {}", url, fullUrl);
+        }
+        log.debug("導航至：{}", fullUrl);
+        page.navigate(fullUrl, new Page.NavigateOptions().setTimeout(15000));
         page.waitForLoadState(LoadState.NETWORKIDLE);
     }
 
     /**
      * 透過 CSS 選擇器點擊元素。
+     * 如果一般 click 被 overlay 攔截（Vaadin loading indicator、dialog 覆蓋層），
+     * 會先嘗試關閉 overlay，再用 dispatchEvent 繞過。
      */
     public void click(Page page, String selector) {
         log.debug("點擊：{}", selector);
-        page.locator(selector).first().click(new Locator.ClickOptions().setTimeout(5000));
+        Locator locator = page.locator(selector).first();
+
+        try {
+            locator.click(new Locator.ClickOptions().setTimeout(5000));
+        } catch (Exception e) {
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && errorMsg.contains("intercepts pointer events")) {
+                log.warn("元素被覆蓋層攔截，嘗試關閉 Vaadin overlay 後用 dispatchEvent 點擊：{}", selector);
+
+                // 嘗試關閉 Vaadin 的 loading indicator 和 overlay
+                page.evaluate("""
+                    () => {
+                        // 關閉 Vaadin loading indicator
+                        document.querySelectorAll('vaadin-connection-indicator, [loading]')
+                            .forEach(el => el.removeAttribute('loading'));
+                        // 移除可能的 overlay
+                        document.querySelectorAll('.vaadin-overlay-content, vaadin-dialog-overlay')
+                            .forEach(el => { if (el.parentNode) el.parentNode.removeChild(el); });
+                    }
+                """);
+                page.waitForTimeout(300);
+
+                // 使用 dispatchEvent 繞過 pointer event 攔截
+                locator.dispatchEvent("click");
+            } else {
+                throw e;
+            }
+        }
     }
 
     /**
