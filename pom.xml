@@ -49,13 +49,6 @@
             <version>${anthropic-sdk.version}</version>
         </dependency>
 
-        <!-- Azure Key Vault (secrets management) -->
-        <dependency>
-            <groupId>com.azure.spring</groupId>
-            <artifactId>spring-cloud-azure-starter-keyvault-secrets</artifactId>
-            <version>5.17.1</version>
-        </dependency>
-
         <!-- Rate Limiting -->
         <dependency>
             <groupId>com.bucket4j</groupId>
