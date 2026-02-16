@@ -6,8 +6,11 @@ import com.team.aiworkflow.model.e2e.E2ETestRequest;
 import com.team.aiworkflow.model.e2e.E2ETestResult;
 import com.team.aiworkflow.model.e2e.TestStep;
 import com.team.aiworkflow.model.autofix.AutoFixResult;
+import com.team.aiworkflow.model.entity.PushRecord.TestOutcome;
 import com.team.aiworkflow.service.autofix.AutoFixOrchestrator;
 import com.team.aiworkflow.service.azuredevops.WorkItemService;
+import com.team.aiworkflow.service.stats.EngineerStatsRecorder;
+import com.team.aiworkflow.service.stats.EngineerStatsService;
 import com.team.aiworkflow.service.e2e.TestScopeResolver.ResolvedTestFlow;
 import com.team.aiworkflow.service.e2e.TestScopeResolver.TestScope;
 import com.team.aiworkflow.service.notification.TeamsNotificationService;
@@ -51,6 +54,8 @@ public class E2ETestOrchestrator {
     private final ClaudeApiService claudeApiService;
     private final ObjectMapper objectMapper;
     private final AutoFixOrchestrator autoFixOrchestrator;
+    private final EngineerStatsRecorder engineerStatsRecorder;
+    private final EngineerStatsService engineerStatsService;
 
     // ========== 精準範圍模式（Push 觸發） ==========
 
@@ -214,6 +219,10 @@ public class E2ETestOrchestrator {
 
         // 建立 Work Item（附截圖）並嘗試自動修復
         createWorkItemsForBugs(result);
+
+        // 記錄測試結果和 bug（工程師績效追蹤）
+        recordStatsForTestResult(request.getPushId(), result);
+
         List<AutoFixResult> fixResults = attemptAutoFixes(result, request);
         notifyTeam(result, fixResults);
 
@@ -363,6 +372,10 @@ public class E2ETestOrchestrator {
                 java.time.Duration.between(result.getStartedAt(), result.getCompletedAt()).toMillis());
 
         createWorkItemsForBugs(result);
+
+        // 記錄測試結果和 bug（工程師績效追蹤）
+        recordStatsForTestResult(request.getPushId(), result);
+
         List<AutoFixResult> fixResults = attemptAutoFixes(result, request);
         notifyTeam(result, fixResults);
 
@@ -870,6 +883,43 @@ public class E2ETestOrchestrator {
         }
 
         teamsNotificationService.sendSimpleMessage(message.toString()).subscribe();
+    }
+
+    /**
+     * 記錄測試結果和 bug 到工程師績效追蹤系統。
+     * 如果測試失敗，還會檢查連續失敗次數並在達到閾值時通知主管。
+     */
+    private void recordStatsForTestResult(String pushId, E2ETestResult result) {
+        try {
+            // 更新 push 記錄的測試結果
+            TestOutcome outcome = switch (result.getStatus()) {
+                case PASSED -> TestOutcome.PASSED;
+                case FAILED -> TestOutcome.FAILED;
+                case TIMEOUT -> TestOutcome.TIMEOUT;
+                case ERROR -> TestOutcome.ERROR;
+                default -> TestOutcome.PENDING;
+            };
+            engineerStatsRecorder.updateTestResult(pushId, outcome, result.getBugsFound().size());
+
+            // 記錄每個 bug
+            for (E2ETestResult.BugFound bug : result.getBugsFound()) {
+                if (bug.getWorkItemId() > 0) {
+                    engineerStatsRecorder.recordBug(pushId, bug.getWorkItemId(),
+                            bug.getSeverity(), bug.getTitle());
+                }
+            }
+
+            // 測試失敗時，檢查連續失敗次數並通知主管
+            if (result.getStatus() == E2ETestResult.TestRunStatus.FAILED && pushId != null) {
+                String project = engineerStatsRecorder.getProjectByPushId(pushId);
+                String email = engineerStatsRecorder.getEngineerEmailByPushId(pushId);
+                if (project != null && email != null) {
+                    engineerStatsService.checkAndAlertStreak(email, project);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("記錄績效追蹤數據失敗（不影響主流程）：{}", e.getMessage());
+        }
     }
 
     /**

@@ -21,4 +21,5 @@ public class E2ETestRequest {
     private int maxSteps;            // 最大測試步驟數（預設 30）
     private int timeoutSeconds;      // 整個測試的逾時時間，秒（預設 300）
     private String triggeredBy;      // 觸發方式："manual"、"deployment-webhook" 等
+    private String pushId;           // 選填：Azure DevOps push ID（績效追蹤用）
 }

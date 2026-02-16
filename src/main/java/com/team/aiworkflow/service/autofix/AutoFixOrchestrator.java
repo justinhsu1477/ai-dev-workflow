@@ -9,6 +9,7 @@ import com.team.aiworkflow.service.azuredevops.PullRequestService;
 import com.team.aiworkflow.service.azuredevops.WorkItemService;
 import com.team.aiworkflow.service.claude.ClaudeApiService;
 import com.team.aiworkflow.service.claude.PromptBuilder;
+import com.team.aiworkflow.service.stats.EngineerStatsRecorder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,7 @@ public class AutoFixOrchestrator {
     private final ClaudeApiService claudeApiService;
     private final PullRequestService pullRequestService;
     private final WorkItemService workItemService;
+    private final EngineerStatsRecorder engineerStatsRecorder;
 
     /**
      * 階段 1：嘗試自動修復 E2E 測試發現的 Bug。
@@ -181,6 +183,9 @@ public class AutoFixOrchestrator {
             try {
                 workItemService.resolveWorkItem(workItemId, comment).block();
                 log.info("Work Item #{} 已自動關閉", workItemId);
+
+                // 記錄 AI 修復成功（工程師績效追蹤）
+                engineerStatsRecorder.recordAiFixSuccess(workItemId);
             } catch (Exception e) {
                 log.error("關閉 Work Item #{} 失敗：{}", workItemId, e.getMessage());
             }

@@ -7,6 +7,7 @@ import com.team.aiworkflow.service.e2e.E2ETestOrchestrator;
 import com.team.aiworkflow.service.e2e.GitDiffAnalysisService;
 import com.team.aiworkflow.service.e2e.TestScopeResolver;
 import com.team.aiworkflow.service.e2e.TestScopeResolver.TestScope;
+import com.team.aiworkflow.service.stats.EngineerStatsRecorder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,7 @@ public class PushWebhookController {
     private final GitDiffAnalysisService gitDiffAnalysisService;
     private final TestScopeResolver testScopeResolver;
     private final E2ETestOrchestrator orchestrator;
+    private final EngineerStatsRecorder engineerStatsRecorder;
 
     @Value("${workflow.e2e-testing.enabled:false}")
     private boolean e2eTestingEnabled;
@@ -120,15 +122,24 @@ public class PushWebhookController {
         // 解析測試範圍（傳入 changedFiles 做 flow-level 精準匹配）
         TestScope scope = testScopeResolver.resolveScope(affectedModules, changedFiles);
 
+        // 記錄 Push 事件（工程師績效追蹤）
+        String pushIdStr = event != null ? extractPushId(event) : "manual";
+        PushedBy pushedBy = extractPushedBy(event);
+        engineerStatsRecorder.recordPush(
+                pushedBy != null ? pushedBy.getDisplayName() : "unknown",
+                pushedBy != null ? pushedBy.getUniqueName() : "unknown@unknown",
+                pushIdStr, branch, repoName, changedFiles.size());
+
         // 建立 E2E 測試請求（branch 已在上方過濾時提取）
         E2ETestRequest request = E2ETestRequest.builder()
                 .appUrl(stagingUrl)
                 .appDescription(buildScopedDescription(scope))
-                .buildNumber(event != null ? extractPushId(event) : "manual")
+                .buildNumber(pushIdStr)
                 .branch(branch)
                 .maxSteps(maxSteps)
                 .timeoutSeconds(timeoutSeconds)
                 .triggeredBy("push-webhook")
+                .pushId(pushIdStr)
                 .build();
 
         // 非同步執行測試
@@ -196,7 +207,7 @@ public class PushWebhookController {
 
         return ResponseEntity.ok(Map.of(
                 "status", "accepted",
-                "message", String.format("精準 AI Test Agent已觸發：%d 個模組，%d 個測試流程",
+                "message", String.format("AI Test Agent已觸發：%d 個模組，%d 個測試流程",
                         affectedModules.size(), scope.getTotalFlows()),
                 "affectedModules", new ArrayList<>(affectedModules),
                 "testFlows", scope.getTestFlows().stream()
@@ -297,6 +308,16 @@ public class PushWebhookController {
     }
 
     /**
+     * 從 Push event 中提取推送者資訊。
+     */
+    private PushedBy extractPushedBy(PushEvent event) {
+        if (event != null && event.getResource() != null) {
+            return event.getResource().getPushedBy();
+        }
+        return null;
+    }
+
+    /**
      * 從 Push event 中提取 Push ID。
      */
     private String extractPushId(PushEvent event) {
@@ -325,6 +346,18 @@ public class PushWebhookController {
         private List<PushCommit> commits;
         private List<RefUpdate> refUpdates;
         private PushRepository repository;
+        private PushedBy pushedBy;
+    }
+
+    /**
+     * Azure DevOps Push 事件中的推送者資訊。
+     */
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PushedBy {
+        private String displayName;
+        private String uniqueName; // email
+        private String id;
     }
 
     @Data
