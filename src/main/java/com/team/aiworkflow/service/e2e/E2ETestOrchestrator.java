@@ -28,7 +28,9 @@ import java.util.UUID;
  *
  * 2. 精準範圍模式（新增）：根據 git diff 分析結果，只測試受影響的模組
  *    流程：啟動瀏覽器 → 登入 → 依序執行各模組的測試流程 → AI 規劃每個流程的步驟
- *         → 逐步執行 → 偵測 bug → 建立 Work Item → 通知團隊
+ *         → 逐步執行 → 偵測 bug → 建立 Work Item（附截圖）→ 通知團隊
+ *
+ * 截圖流程：Playwright 截圖 → byte[] → 上傳 Azure DevOps 附件 → 關聯到 Bug Work Item
  */
 @Service
 @Slf4j
@@ -45,9 +47,6 @@ public class E2ETestOrchestrator {
     /**
      * 非同步執行精準範圍的 AI E2E 測試。
      * 由 Push webhook 觸發，只測試受影響的模組。
-     *
-     * @param request 測試請求
-     * @param scope   測試範圍（由 TestScopeResolver 解析）
      */
     @Async("aiTaskExecutor")
     public void runScopedTestAsync(E2ETestRequest request, TestScope scope) {
@@ -61,10 +60,6 @@ public class E2ETestOrchestrator {
     /**
      * 同步執行精準範圍的 AI E2E 測試。
      * 登入 → 依序測試各模組的測試流程 → 收集結果。
-     *
-     * @param request 測試請求
-     * @param scope   測試範圍
-     * @return 完整測試結果
      */
     public E2ETestResult runScopedTest(E2ETestRequest request, TestScope scope) {
         String testRunId = UUID.randomUUID().toString().substring(0, 8);
@@ -77,7 +72,6 @@ public class E2ETestOrchestrator {
                 .appDescription(request.getAppDescription())
                 .startedAt(LocalDateTime.now())
                 .bugsFound(new ArrayList<>())
-                .screenshotPaths(new ArrayList<>())
                 .steps(new ArrayList<>())
                 .status(E2ETestResult.TestRunStatus.RUNNING)
                 .buildNumber(request.getBuildNumber())
@@ -111,7 +105,6 @@ public class E2ETestOrchestrator {
 
             // 步驟 3：依序執行各測試流程
             for (ResolvedTestFlow testFlow : scope.getTestFlows()) {
-                // 檢查是否逾時
                 if (System.currentTimeMillis() > deadline) {
                     log.warn("[{}] 測試在流程 '{}' 逾時", testRunId, testFlow.getFlowName());
                     result.setStatus(E2ETestResult.TestRunStatus.TIMEOUT);
@@ -121,18 +114,15 @@ public class E2ETestOrchestrator {
                 log.info("[{}] === 開始測試流程：{} ({}) ===",
                         testRunId, testFlow.getFlowName(), testFlow.getRoute());
 
-                // 導航到測試流程的頁面
                 String fullUrl = request.getAppUrl() + testFlow.getRoute();
                 playwrightService.navigate(page, fullUrl);
 
-                // 取得頁面狀態
                 String pageContent = playwrightService.getAccessibilityTree(page);
 
-                // AI 規劃此流程的測試步驟
                 String flowContext = buildFlowContext(testFlow, scope.getScopeDescription());
                 List<TestStep> flowSteps = aiTestPlanner.planTestSteps(
                         fullUrl, flowContext, pageContent,
-                        Math.min(10, request.getMaxSteps())); // 每個流程最多 10 步
+                        Math.min(10, request.getMaxSteps()));
 
                 if (flowSteps.isEmpty()) {
                     log.warn("[{}] AI 未為流程 '{}' 產生測試步驟", testRunId, testFlow.getFlowName());
@@ -142,7 +132,6 @@ public class E2ETestOrchestrator {
                 log.info("[{}] 流程 '{}' 規劃了 {} 個步驟",
                         testRunId, testFlow.getFlowName(), flowSteps.size());
 
-                // 逐步執行
                 for (TestStep step : flowSteps) {
                     if (System.currentTimeMillis() > deadline) {
                         result.setStatus(E2ETestResult.TestRunStatus.TIMEOUT);
@@ -159,12 +148,10 @@ public class E2ETestOrchestrator {
                     TestStep executedStep = playwrightService.executeStep(page, step, testRunId);
                     result.getSteps().add(executedStep);
 
-                    if (executedStep.getScreenshotPath() != null) {
-                        result.getScreenshotPaths().add(executedStep.getScreenshotPath());
-                    }
-
                     if (executedStep.getStatus() == TestStep.StepStatus.PASSED) {
                         passedCount++;
+                        // 通過的步驟不需要保留截圖，釋放記憶體
+                        executedStep.setScreenshotData(null);
                     } else if (executedStep.getStatus() == TestStep.StepStatus.FAILED) {
                         failedCount++;
                         recordBug(result, executedStep, page, testFlow, testRunId);
@@ -208,7 +195,7 @@ public class E2ETestOrchestrator {
         result.setTotalDurationMs(
                 java.time.Duration.between(result.getStartedAt(), result.getCompletedAt()).toMillis());
 
-        // 建立 Work Item 並通知團隊
+        // 建立 Work Item（附截圖）並通知團隊
         createWorkItemsForBugs(result);
         notifyTeam(result);
 
@@ -245,7 +232,6 @@ public class E2ETestOrchestrator {
                 .appDescription(request.getAppDescription())
                 .startedAt(LocalDateTime.now())
                 .bugsFound(new ArrayList<>())
-                .screenshotPaths(new ArrayList<>())
                 .steps(new ArrayList<>())
                 .status(E2ETestResult.TestRunStatus.RUNNING)
                 .buildNumber(request.getBuildNumber())
@@ -260,17 +246,14 @@ public class E2ETestOrchestrator {
         Page page = null;
 
         try {
-            // 步驟 1：啟動瀏覽器
             context = playwrightService.createSession();
             page = context.newPage();
             log.info("[{}] 瀏覽器工作階段已建立", testRunId);
 
-            // 步驟 2：導航到應用程式並取得初始頁面狀態
             playwrightService.navigate(page, request.getAppUrl());
             String initialPageContent = playwrightService.getAccessibilityTree(page);
             log.info("[{}] 初始頁面已載入，正在規劃測試步驟...", testRunId);
 
-            // 步驟 3：AI 規劃測試步驟
             List<TestStep> plannedSteps = aiTestPlanner.planTestSteps(
                     request.getAppUrl(),
                     request.getAppDescription(),
@@ -286,7 +269,6 @@ public class E2ETestOrchestrator {
 
             log.info("[{}] AI 規劃了 {} 個測試步驟", testRunId, plannedSteps.size());
 
-            // 步驟 4：逐步執行
             int passedCount = 0;
             int failedCount = 0;
 
@@ -303,12 +285,9 @@ public class E2ETestOrchestrator {
                 TestStep executedStep = playwrightService.executeStep(page, step, testRunId);
                 result.getSteps().add(executedStep);
 
-                if (executedStep.getScreenshotPath() != null) {
-                    result.getScreenshotPaths().add(executedStep.getScreenshotPath());
-                }
-
                 if (executedStep.getStatus() == TestStep.StepStatus.PASSED) {
                     passedCount++;
+                    executedStep.setScreenshotData(null);
                 } else if (executedStep.getStatus() == TestStep.StepStatus.FAILED) {
                     failedCount++;
 
@@ -326,7 +305,7 @@ public class E2ETestOrchestrator {
                                     executedStep.getErrorMessage()))
                             .severity(determineSeverity(executedStep))
                             .stepNumber(executedStep.getStepNumber())
-                            .screenshotPath(executedStep.getScreenshotPath())
+                            .screenshotData(executedStep.getScreenshotData())
                             .pageUrl(currentUrl)
                             .consoleErrors(consoleErrors)
                             .expectedBehavior(executedStep.getDescription())
@@ -378,22 +357,15 @@ public class E2ETestOrchestrator {
 
     /**
      * 執行登入流程。
-     * 導航到登入頁面，填入帳號密碼，點擊登入按鈕。
-     *
-     * @return 登入是否成功
      */
     private boolean performLogin(Page page, String appUrl, TestScope scope, String testRunId) {
         try {
             log.info("[{}] 開始登入流程，角色：{}", testRunId, scope.getTestRole());
 
-            // 導航到登入頁面
             String loginUrl = appUrl + scope.getLoginUrl();
             playwrightService.navigate(page, loginUrl);
-
-            // 等待登入表單載入（最多等 10 秒）
             playwrightService.waitForElement(page, scope.getLoginUsernameField(), 10000);
 
-            // 輸入帳號
             TestStep usernameStep = TestStep.builder()
                     .action(TestStep.Action.TYPE)
                     .target(scope.getLoginUsernameField())
@@ -402,7 +374,6 @@ public class E2ETestOrchestrator {
                     .build();
             playwrightService.executeStep(page, usernameStep, testRunId);
 
-            // 輸入密碼
             TestStep passwordStep = TestStep.builder()
                     .action(TestStep.Action.TYPE)
                     .target(scope.getLoginPasswordField())
@@ -411,7 +382,6 @@ public class E2ETestOrchestrator {
                     .build();
             playwrightService.executeStep(page, passwordStep, testRunId);
 
-            // 點擊登入按鈕
             TestStep submitStep = TestStep.builder()
                     .action(TestStep.Action.CLICK)
                     .target(scope.getLoginSubmitButton())
@@ -419,8 +389,7 @@ public class E2ETestOrchestrator {
                     .build();
             playwrightService.executeStep(page, submitStep, testRunId);
 
-            // 等待頁面跳轉（登入成功後會跳轉到首頁）
-            Thread.sleep(2000); // 等待登入處理
+            Thread.sleep(2000);
 
             String currentUrl = playwrightService.getCurrentUrl(page);
             boolean success = !currentUrl.contains("/login");
@@ -466,7 +435,7 @@ public class E2ETestOrchestrator {
     }
 
     /**
-     * 記錄測試中發現的 bug。
+     * 記錄測試中發現的 bug（精準模式用）。
      */
     private void recordBug(E2ETestResult result, TestStep executedStep,
                             Page page, ResolvedTestFlow flow, String testRunId) {
@@ -486,7 +455,7 @@ public class E2ETestOrchestrator {
                         executedStep.getErrorMessage()))
                 .severity(determineSeverity(executedStep))
                 .stepNumber(executedStep.getStepNumber())
-                .screenshotPath(executedStep.getScreenshotPath())
+                .screenshotData(executedStep.getScreenshotData())
                 .pageUrl(currentUrl)
                 .consoleErrors(consoleErrors)
                 .expectedBehavior(executedStep.getDescription())
@@ -499,7 +468,12 @@ public class E2ETestOrchestrator {
     }
 
     /**
-     * 為每個發現的 bug 建立 Azure DevOps Work Item。
+     * 為每個發現的 bug 建立 Azure DevOps Work Item 並附加截圖。
+     *
+     * 流程：
+     * 1. 建立 Bug Work Item
+     * 2. 如果有截圖 → 上傳附件到 Azure DevOps
+     * 3. 將附件關聯到 Work Item
      */
     private void createWorkItemsForBugs(E2ETestResult result) {
         for (E2ETestResult.BugFound bug : result.getBugsFound()) {
@@ -514,10 +488,39 @@ public class E2ETestOrchestrator {
                                 .summary(bug.getTitle())
                                 .build();
 
+                // 步驟 1：建立 Bug Work Item
                 Integer workItemId = workItemService.createBugFromAnalysis(analysisResult).block();
                 if (workItemId != null) {
                     bug.setWorkItemId(workItemId);
                     log.info("已建立 Work Item #{} - E2E bug：{}", workItemId, bug.getTitle());
+
+                    // 步驟 2：上傳截圖附件
+                    if (bug.getScreenshotData() != null && bug.getScreenshotData().length > 0) {
+                        try {
+                            String fileName = String.format("e2e-%s-step%d.png",
+                                    result.getTestRunId(), bug.getStepNumber());
+
+                            String attachmentUrl = workItemService
+                                    .uploadAttachment(bug.getScreenshotData(), fileName)
+                                    .block();
+
+                            if (attachmentUrl != null) {
+                                // 步驟 3：關聯附件到 Work Item
+                                workItemService.attachToWorkItem(
+                                        workItemId, attachmentUrl,
+                                        String.format("E2E 測試截圖 - 步驟 %d", bug.getStepNumber())
+                                ).block();
+
+                                bug.setAttachmentUrl(attachmentUrl);
+                                log.info("截圖已附加到 Work Item #{}：{}", workItemId, fileName);
+                            }
+                        } catch (Exception e) {
+                            log.warn("上傳截圖到 Work Item #{} 失敗：{}", workItemId, e.getMessage());
+                        }
+
+                        // 上傳完成後釋放記憶體
+                        bug.setScreenshotData(null);
+                    }
                 }
             } catch (Exception e) {
                 log.error("建立 Work Item 失敗：{}", bug.getTitle(), e);
@@ -550,7 +553,6 @@ public class E2ETestOrchestrator {
 
     /**
      * 根據失敗步驟的操作類型判斷嚴重程度。
-     * CLICK/NAVIGATE 失敗代表使用者無法執行關鍵操作，嚴重程度較高。
      */
     private String determineSeverity(TestStep failedStep) {
         return switch (failedStep.getAction()) {

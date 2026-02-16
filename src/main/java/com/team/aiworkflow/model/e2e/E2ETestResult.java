@@ -1,5 +1,6 @@
 package com.team.aiworkflow.model.e2e;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,7 +11,7 @@ import java.util.List;
 
 /**
  * AI E2E 測試的完整執行結果。
- * 包含所有測試步驟、發現的 bug、截圖路徑和統計資訊。
+ * 包含所有測試步驟、發現的 bug 和統計資訊。
  */
 @Data
 @Builder
@@ -27,7 +28,6 @@ public class E2ETestResult {
 
     private List<TestStep> steps;          // 所有測試步驟
     private List<BugFound> bugsFound;      // 發現的 bug 清單
-    private List<String> screenshotPaths;  // 截圖路徑清單
 
     private int totalSteps;       // 總步驟數
     private int passedSteps;      // 通過步驟數
@@ -36,7 +36,7 @@ public class E2ETestResult {
     private String summary;       // 測試摘要
 
     // 中繼資料
-    private String triggeredBy;   // 觸發方式："deployment-webhook" 或 "manual"
+    private String triggeredBy;   // 觸發方式："deployment-webhook"、"push-webhook"、"manual"
     private String buildNumber;   // Build 編號
     private String branch;        // 分支名稱
 
@@ -63,11 +63,14 @@ public class E2ETestResult {
         private String description;      // Bug 描述
         private String severity;         // 嚴重程度：LOW, MEDIUM, HIGH, CRITICAL
         private int stepNumber;          // 發現此 bug 的步驟編號
-        private String screenshotPath;   // 截圖路徑
         private String pageUrl;          // 發現 bug 時的頁面 URL
         private String consoleErrors;    // Console 錯誤訊息
         private String expectedBehavior; // 預期行為
         private String actualBehavior;   // 實際行為
         private int workItemId;          // 建立的 Azure DevOps Work Item ID
+        private String attachmentUrl;    // Azure DevOps 截圖附件 URL
+
+        @JsonIgnore
+        private byte[] screenshotData;   // 截圖二進位資料（不序列化，上傳後丟棄）
     }
 }

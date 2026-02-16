@@ -53,7 +53,7 @@ workflow:
     max-steps: 30
     # 整個測試的逾時時間（秒）
     timeout-seconds: 300
-    # 每個步驟後截圖
+    # 每個步驟後截圖（截圖直接上傳到 Azure DevOps Work Item 附件，不存本機）
     screenshot-each-step: true
   test-generation:
     enabled: false

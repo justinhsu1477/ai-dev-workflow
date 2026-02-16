@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
 
@@ -16,8 +15,8 @@ import java.util.Base64;
  * 封裝 Playwright 瀏覽器操作。
  * 管理瀏覽器生命週期，並提供方法讓 AI Agent 與頁面互動。
  *
- * 在 Docker 中，透過 application.yml 的 playwright.chromium-path 設定系統安裝的 Chromium 路徑。
- * 本機開發時留空，Playwright 會自動下載 Chromium。
+ * 截圖以 byte[] 回傳，不寫入磁碟，
+ * 由 WorkItemService 直接上傳到 Azure DevOps Work Item 附件。
  */
 @Service
 @Slf4j
@@ -91,19 +90,13 @@ public class PlaywrightService {
     }
 
     /**
-     * 截圖並回傳檔案路徑。
+     * 截圖並回傳 byte[] 二進位資料。
+     * 不寫入磁碟，由呼叫端決定要上傳到 Azure DevOps 或其他用途。
      */
-    public String takeScreenshot(Page page, String testRunId, int stepNumber) {
-        String filename = String.format("e2e-%s-step%d.png", testRunId, stepNumber);
-        Path screenshotPath = Paths.get(System.getProperty("java.io.tmpdir"), "e2e-screenshots", filename);
-        screenshotPath.getParent().toFile().mkdirs();
-
-        page.screenshot(new Page.ScreenshotOptions()
-                .setPath(screenshotPath)
-                .setFullPage(true));
-
-        log.debug("截圖已儲存：{}", screenshotPath);
-        return screenshotPath.toString();
+    public byte[] takeScreenshot(Page page) {
+        byte[] data = page.screenshot(new Page.ScreenshotOptions().setFullPage(true));
+        log.debug("已擷取截圖（{} bytes）", data.length);
+        return data;
     }
 
     /**
@@ -209,6 +202,7 @@ public class PlaywrightService {
     /**
      * 執行單一測試步驟。
      * 根據步驟的 Action 類型執行對應的瀏覽器操作，並在每步後截圖。
+     * 截圖以 byte[] 存在 TestStep 中，不寫入磁碟。
      */
     public TestStep executeStep(Page page, TestStep step, String testRunId) {
         long start = System.currentTimeMillis();
@@ -237,9 +231,14 @@ public class PlaywrightService {
             log.warn("步驟 {} 失敗：{}", step.getStepNumber(), e.getMessage());
         }
 
-        // 每個步驟執行後都截圖記錄
-        String screenshotPath = takeScreenshot(page, testRunId, step.getStepNumber());
-        step.setScreenshotPath(screenshotPath);
+        // 每個步驟執行後都截圖（存為 byte[]）
+        try {
+            byte[] screenshot = takeScreenshot(page);
+            step.setScreenshotData(screenshot);
+        } catch (Exception e) {
+            log.warn("步驟 {} 截圖失敗：{}", step.getStepNumber(), e.getMessage());
+        }
+
         step.setDurationMs(System.currentTimeMillis() - start);
 
         return step;

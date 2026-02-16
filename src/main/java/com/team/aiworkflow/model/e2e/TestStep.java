@@ -1,5 +1,6 @@
 package com.team.aiworkflow.model.e2e;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,9 +21,11 @@ public class TestStep {
     private String value;            // TYPE 操作時要輸入的文字
     private String description;      // 步驟的人類可讀描述
     private StepStatus status;       // 步驟狀態
-    private String screenshotPath;   // 截圖檔案路徑
     private String errorMessage;     // 失敗時的錯誤訊息
     private long durationMs;         // 執行耗時（毫秒）
+
+    @JsonIgnore
+    private byte[] screenshotData;   // 截圖二進位資料（不序列化到 JSON 回應）
 
     /**
      * 測試步驟的操作類型。
