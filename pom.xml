@@ -70,6 +70,13 @@
             <version>1.49.0</version>
         </dependency>
 
+        <!-- .env 檔案支援（啟動時自動載入 .env 為環境變數） -->
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>spring-dotenv</artifactId>
+            <version>4.0.0</version>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
