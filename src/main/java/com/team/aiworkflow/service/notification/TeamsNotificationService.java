@@ -54,6 +54,7 @@ public class TeamsNotificationService {
      */
     public Mono<Void> sendSimpleMessage(String message) {
         if (webhookUrl == null || webhookUrl.isBlank()) {
+            log.warn("Teams webhook URL 未設定，跳過 E2E 測試通知");
             return Mono.empty();
         }
 
@@ -72,11 +73,15 @@ public class TeamsNotificationService {
                 ))
         );
 
+        log.info("正在發送 Teams E2E 測試通知...");
+
         return webClient.post()
                 .uri(webhookUrl)
                 .bodyValue(payload)
                 .retrieve()
                 .bodyToMono(Void.class)
+                .doOnSuccess(v -> log.info("Teams E2E 測試通知已發送"))
+                .doOnError(e -> log.error("發送 Teams E2E 測試通知失敗：{}", e.getMessage()))
                 .onErrorResume(e -> Mono.empty());
     }
 

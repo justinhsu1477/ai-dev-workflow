@@ -93,6 +93,33 @@ public class WorkItemService {
     }
 
     /**
+     * 更新 Work Item 的 ReproSteps 欄位（用於嵌入截圖到重現步驟中）。
+     *
+     * @param workItemId Work Item ID
+     * @param reproStepsHtml 新的 ReproSteps HTML 內容
+     */
+    public Mono<Void> updateReproSteps(int workItemId, String reproStepsHtml) {
+        log.info("正在更新 Work Item #{} 的 ReproSteps", workItemId);
+
+        List<Map<String, Object>> patchDocument = List.of(
+                Map.of(
+                        "op", "replace",
+                        "path", "/fields/Microsoft.VSTS.TCM.ReproSteps",
+                        "value", reproStepsHtml
+                )
+        );
+
+        return webClient.patch()
+                .uri("/_apis/wit/workitems/{id}?api-version=7.1", workItemId)
+                .contentType(MediaType.valueOf("application/json-patch+json"))
+                .bodyValue(patchDocument)
+                .retrieve()
+                .bodyToMono(Void.class)
+                .doOnSuccess(v -> log.info("Work Item #{} 的 ReproSteps 已更新（含截圖）", workItemId))
+                .doOnError(e -> log.error("更新 Work Item #{} ReproSteps 失敗：{}", workItemId, e.getMessage()));
+    }
+
+    /**
      * 將已上傳的附件關聯到 Work Item。
      *
      * API：PATCH /_apis/wit/workitems/{id}?api-version=7.1

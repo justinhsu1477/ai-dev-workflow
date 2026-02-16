@@ -508,13 +508,15 @@ public class E2ETestOrchestrator {
                     bug.setWorkItemId(workItemId);
                     log.info("已建立 Work Item #{} - E2E bug：{}", workItemId, bug.getTitle());
 
+                    String attachmentUrl = null;
+
                     // 步驟 2：上傳截圖附件
                     if (bug.getScreenshotData() != null && bug.getScreenshotData().length > 0) {
                         try {
                             String fileName = String.format("e2e-%s-step%d.png",
                                     result.getTestRunId(), bug.getStepNumber());
 
-                            String attachmentUrl = workItemService
+                            attachmentUrl = workItemService
                                     .uploadAttachment(bug.getScreenshotData(), fileName)
                                     .block();
 
@@ -535,11 +537,96 @@ public class E2ETestOrchestrator {
                         // 上傳完成後釋放記憶體
                         bug.setScreenshotData(null);
                     }
+
+                    // 步驟 4：更新 ReproSteps，嵌入 E2E 測試詳細資訊和截圖
+                    try {
+                        String reproStepsHtml = buildE2EReproSteps(bug, result, attachmentUrl);
+                        workItemService.updateReproSteps(workItemId, reproStepsHtml).block();
+                        log.info("已更新 Work Item #{} 的 ReproSteps（含測試詳情和截圖）", workItemId);
+                    } catch (Exception e) {
+                        log.warn("更新 Work Item #{} ReproSteps 失敗：{}", workItemId, e.getMessage());
+                    }
                 }
             } catch (Exception e) {
                 log.error("建立 Work Item 失敗：{}", bug.getTitle(), e);
             }
         }
+    }
+
+    /**
+     * 組裝 E2E 測試的 ReproSteps HTML，嵌入測試詳細資訊和截圖。
+     * 這段 HTML 會顯示在 Azure DevOps Work Item 的「重現步驟」區塊中。
+     */
+    private String buildE2EReproSteps(E2ETestResult.BugFound bug,
+                                       E2ETestResult result,
+                                       String attachmentUrl) {
+        StringBuilder sb = new StringBuilder();
+
+        // 測試資訊摘要
+        sb.append("<h3>E2E 測試資訊</h3>");
+        sb.append("<table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse'>");
+        sb.append(String.format("<tr><td><strong>測試執行 ID</strong></td><td>%s</td></tr>",
+                result.getTestRunId() != null ? result.getTestRunId() : "N/A"));
+        sb.append(String.format("<tr><td><strong>Build</strong></td><td>#%s</td></tr>",
+                result.getBuildNumber() != null ? result.getBuildNumber() : "手動觸發"));
+        sb.append(String.format("<tr><td><strong>分支</strong></td><td>%s</td></tr>",
+                result.getBranch() != null ? result.getBranch() : "N/A"));
+        sb.append(String.format("<tr><td><strong>測試環境</strong></td><td>%s</td></tr>",
+                result.getAppUrl() != null ? result.getAppUrl() : "N/A"));
+        sb.append(String.format("<tr><td><strong>嚴重程度</strong></td><td>%s</td></tr>",
+                bug.getSeverity()));
+        sb.append(String.format("<tr><td><strong>失敗步驟</strong></td><td>第 %d 步</td></tr>",
+                bug.getStepNumber()));
+        sb.append(String.format("<tr><td><strong>頁面 URL</strong></td><td>%s</td></tr>",
+                bug.getPageUrl() != null ? bug.getPageUrl() : "N/A"));
+        sb.append("</table>");
+
+        // 重現步驟
+        sb.append("<h3>重現步驟</h3>");
+        sb.append("<ol>");
+        sb.append(String.format("<li>開啟測試環境：%s</li>",
+                result.getAppUrl() != null ? result.getAppUrl() : "N/A"));
+        sb.append("<li>使用測試帳號登入系統</li>");
+        sb.append(String.format("<li>導航至發生問題的頁面：%s</li>",
+                bug.getPageUrl() != null ? bug.getPageUrl() : "N/A"));
+        sb.append(String.format("<li>執行操作：%s</li>",
+                bug.getExpectedBehavior() != null ? bug.getExpectedBehavior() : "N/A"));
+        sb.append(String.format("<li><strong>結果：步驟失敗</strong> — %s</li>",
+                bug.getActualBehavior() != null ? bug.getActualBehavior() : "未知錯誤"));
+        sb.append("</ol>");
+
+        // 預期 vs 實際行為
+        sb.append("<h3>預期行為</h3>");
+        sb.append(String.format("<p>%s</p>",
+                bug.getExpectedBehavior() != null ? bug.getExpectedBehavior() : "N/A"));
+        sb.append("<h3>實際行為</h3>");
+        sb.append(String.format("<p>%s</p>",
+                bug.getActualBehavior() != null ? bug.getActualBehavior() : "N/A"));
+
+        // 詳細錯誤描述
+        sb.append("<h3>錯誤詳情</h3>");
+        sb.append(String.format("<pre>%s</pre>",
+                bug.getDescription() != null ? bug.getDescription() : "N/A"));
+
+        // Console 錯誤
+        if (bug.getConsoleErrors() != null && !bug.getConsoleErrors().isBlank()) {
+            sb.append("<h3>瀏覽器 Console 錯誤</h3>");
+            sb.append(String.format("<pre>%s</pre>", bug.getConsoleErrors()));
+        }
+
+        // 截圖
+        if (attachmentUrl != null) {
+            sb.append("<h3>失敗時的畫面截圖</h3>");
+            sb.append(String.format("<p><img src=\"%s\" alt=\"E2E 測試截圖 - 步驟 %d\" "
+                            + "style=\"max-width:100%%; border:1px solid #ccc;\"></p>",
+                    attachmentUrl, bug.getStepNumber()));
+        }
+
+        // 自動產生標註
+        sb.append("<hr>");
+        sb.append("<p><em>此 Work Item 由 AI Dev Workflow E2E 測試自動建立。</em></p>");
+
+        return sb.toString();
     }
 
     /**
