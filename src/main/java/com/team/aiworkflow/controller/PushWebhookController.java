@@ -59,6 +59,12 @@ public class PushWebhookController {
     @Value("${workflow.e2e-testing.timeout-seconds:300}")
     private int timeoutSeconds;
 
+    @Value("${workflow.e2e-testing.repository:}")
+    private String allowedRepository;
+
+    @Value("${workflow.e2e-testing.branches:}")
+    private String allowedBranches;
+
     /**
      * 接收 Azure DevOps Push 事件，分析變更檔案並觸發精準 E2E 測試。
      */
@@ -79,6 +85,26 @@ public class PushWebhookController {
                     "message", "staging-url 未設定"));
         }
 
+        // 檢查 Repository 是否符合
+        String repoName = extractRepositoryName(event);
+        if (allowedRepository != null && !allowedRepository.isBlank()
+                && !allowedRepository.equals(repoName)) {
+            log.info("略過非目標 Repository 的 Push 事件：{}（期望：{}）", repoName, allowedRepository);
+            return ResponseEntity.ok(Map.of("status", "skipped",
+                    "message", String.format("非目標 Repository（%s），略過", repoName)));
+        }
+
+        // 檢查 Branch 是否在允許清單中
+        String branch = extractBranch(event);
+        if (allowedBranches != null && !allowedBranches.isBlank()) {
+            Set<String> branchSet = Set.of(allowedBranches.split(","));
+            if (!branchSet.contains(branch)) {
+                log.info("略過非目標分支的 Push 事件：{}（允許：{}）", branch, allowedBranches);
+                return ResponseEntity.ok(Map.of("status", "skipped",
+                        "message", String.format("非目標分支（%s），略過", branch)));
+            }
+        }
+
         // 從 Push event 中提取變更檔案
         List<String> changedFiles = extractChangedFiles(event);
 
@@ -94,8 +120,7 @@ public class PushWebhookController {
         // 解析測試範圍
         TestScope scope = testScopeResolver.resolveScope(affectedModules);
 
-        // 建立 E2E 測試請求
-        String branch = event != null ? extractBranch(event) : "unknown";
+        // 建立 E2E 測試請求（branch 已在上方過濾時提取）
         E2ETestRequest request = E2ETestRequest.builder()
                 .appUrl(stagingUrl)
                 .appDescription(buildScopedDescription(scope))
@@ -259,6 +284,17 @@ public class PushWebhookController {
     }
 
     /**
+     * 從 Push event 中提取 Repository 名稱。
+     */
+    private String extractRepositoryName(PushEvent event) {
+        if (event != null && event.getResource() != null
+                && event.getResource().getRepository() != null) {
+            return event.getResource().getRepository().getName();
+        }
+        return "unknown";
+    }
+
+    /**
      * 從 Push event 中提取 Push ID。
      */
     private String extractPushId(PushEvent event) {
@@ -286,6 +322,14 @@ public class PushWebhookController {
         private Integer pushId;
         private List<PushCommit> commits;
         private List<RefUpdate> refUpdates;
+        private PushRepository repository;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PushRepository {
+        private String id;
+        private String name;
     }
 
     @Data

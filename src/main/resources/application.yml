@@ -44,11 +44,15 @@ workflow:
     # 送給 AI 分析的最大 log 行數
     max-log-lines: 500
   e2e-testing:
-    enabled: false
+    enabled: true
     # 要測試的 staging/dev 環境 URL
     staging-url: ${E2E_STAGING_URL:}
     # 應用程式描述（幫助 AI 規劃測試步驟）
     app-description: ${E2E_APP_DESCRIPTION:}
+    # 監聽的 Repository 名稱（Azure DevOps repo name）
+    repository: BA.WeiChuan.OCDS.Web.v2
+    # 只有這些分支的 push 才觸發 E2E 測試（逗號分隔）
+    branches: ai-dev-workflow
     # 每次測試的最大步驟數
     max-steps: 30
     # 整個測試的逾時時間（秒）
