@@ -34,6 +34,8 @@ rate-limit:
 playwright:
   # Chromium 執行檔路徑（Docker 中使用系統安裝的 Chromium，本機留空則自動下載）
   chromium-path: ${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:}
+  # 無頭模式（true=背景執行，false=顯示瀏覽器視窗，demo 時設 false）
+  headless: ${PLAYWRIGHT_HEADLESS:true}
 
 # 工作流程設定
 workflow:

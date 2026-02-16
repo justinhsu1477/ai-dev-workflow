@@ -14,9 +14,9 @@
 # 應用程式登入設定（AI Agent 需要登入才能測試）
 login:
   url: "/login"
-  username-field: "input[name='username']"
-  password-field: "input[name='password']"
-  submit-button: "button[type='submit']"
+  username-field: "#vaadinLoginUsername"
+  password-field: "#vaadinLoginPassword"
+  submit-button: "vaadin-button[theme~='submit']"
   # 測試帳號（從環境變數注入，不寫死在設定檔）
   test-username: ${E2E_TEST_USERNAME:admin}
   test-password: ${E2E_TEST_PASSWORD:admin}

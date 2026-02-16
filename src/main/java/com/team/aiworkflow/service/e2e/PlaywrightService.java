@@ -25,6 +25,9 @@ public class PlaywrightService {
     @Value("${playwright.chromium-path:}")
     private String chromiumExecutablePath;
 
+    @Value("${playwright.headless:true}")
+    private boolean headless;
+
     private Playwright playwright;
     private Browser browser;
 
@@ -34,11 +37,11 @@ public class PlaywrightService {
      */
     public BrowserContext createSession() {
         if (playwright == null) {
-            log.info("正在初始化 Playwright...");
+            log.info("正在初始化 Playwright...（headless={}）", headless);
             playwright = Playwright.create();
 
             BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
-                    .setHeadless(true)
+                    .setHeadless(headless)
                     .setTimeout(30000);
 
             // 在 Docker 中使用系統安裝的 Chromium
@@ -48,7 +51,7 @@ public class PlaywrightService {
             }
 
             browser = playwright.chromium().launch(launchOptions);
-            log.info("Playwright 瀏覽器已啟動（headless Chromium）");
+            log.info("Playwright 瀏覽器已啟動（headless={}）", headless);
         }
 
         return browser.newContext(new Browser.NewContextOptions()
