@@ -42,6 +42,7 @@ public class SourceCodeResolver {
 
     /**
      * 根據 bug 找到相關原始碼檔案並讀取。
+     * 優先順序：元件名稱 → flow-level patterns → module-level patterns
      *
      * @return filePath（相對於 repo root）→ 檔案內容
      */
@@ -60,25 +61,59 @@ public class SourceCodeResolver {
         List<String> componentNames = extractComponentNames(bug.getActualBehavior());
         log.info("從 bug 描述提取到元件名稱：{}", componentNames);
 
-        // 2. 從路由找到對應的 module，取得 filePatterns
+        // 2. 從路由找到對應的 module 和精準的 test flow
         ModuleDefinition module = findModuleByRoute(bug.getPageUrl());
-        List<String> filePatterns = module != null ? module.getFilePatterns() : List.of();
-        log.info("對應模組：{}，filePatterns：{}", module != null ? module.getName() : "未找到", filePatterns);
+        TestFlowDefinition matchedFlow = module != null ? findFlowByRoute(module, bug.getPageUrl()) : null;
 
-        // 3. 先找明確提到的元件檔案（優先級最高）
+        List<String> flowPatterns = matchedFlow != null ? matchedFlow.getFilePatterns() : List.of();
+        List<String> modulePatterns = module != null ? module.getFilePatterns() : List.of();
+
+        log.info("對應模組：{}，flow：{}，flow-patterns：{}，module-patterns：{}",
+                module != null ? module.getName() : "未找到",
+                matchedFlow != null ? matchedFlow.getName() : "未找到",
+                flowPatterns, modulePatterns);
+
+        // 3. 最高優先：明確提到的元件檔案
         for (String name : componentNames) {
             if (result.size() >= autoFixConfig.getMaxFilesToRead()) break;
             findFilesByClassName(sourceRoot, repoRoot, name, result);
         }
 
-        // 4. 再根據 module filePatterns 找其他相關檔案
-        for (String pattern : filePatterns) {
+        // 4. 高優先：flow-level patterns（精準，如 **/views/order/d2/**）
+        for (String pattern : flowPatterns) {
+            if (result.size() >= autoFixConfig.getMaxFilesToRead()) break;
+            findFilesByPattern(repoRoot, pattern, result);
+        }
+
+        // 5. 低優先：module-level patterns（較廣，補充上下文）
+        for (String pattern : modulePatterns) {
             if (result.size() >= autoFixConfig.getMaxFilesToRead()) break;
             findFilesByPattern(repoRoot, pattern, result);
         }
 
         log.info("共找到 {} 個相關原始碼檔案", result.size());
         return result;
+    }
+
+    /**
+     * 在 module 中找到路由匹配的 test flow。
+     */
+    TestFlowDefinition findFlowByRoute(ModuleDefinition module, String pageUrl) {
+        if (pageUrl == null || module == null) return null;
+
+        String route;
+        try {
+            route = URI.create(pageUrl).getPath();
+        } catch (Exception e) {
+            route = pageUrl;
+        }
+
+        for (TestFlowDefinition flow : module.getTestFlows()) {
+            if (flow.getRoute() != null && route.contains(flow.getRoute())) {
+                return flow;
+            }
+        }
+        return null;
     }
 
     /**

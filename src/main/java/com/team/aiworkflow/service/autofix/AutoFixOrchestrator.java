@@ -14,6 +14,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -80,10 +83,27 @@ public class AutoFixOrchestrator {
             }
             log.info("Work Item #{} 找到 {} 個相關原始碼檔案", workItemId, sourceFiles.size());
 
-            // 步驟 2：組裝 prompt
+            // 步驟 2：組裝 prompt（含路由、模組、主要檔案等上下文）
             String codeContext = sourceCodeResolver.buildCodeContext(sourceFiles);
-            String prompt = promptBuilder.buildE2EBugFixPrompt(bug, codeContext);
-            log.info("Work Item #{} prompt 已組裝（{} chars）", workItemId, prompt.length());
+
+            // 提取路由和模組資訊，讓 AI 知道 bug 的精確位置
+            String pageRoute = null;
+            try {
+                if (bug.getPageUrl() != null) {
+                    pageRoute = URI.create(bug.getPageUrl()).getPath();
+                }
+            } catch (Exception e) {
+                pageRoute = bug.getPageUrl();
+            }
+            var module = sourceCodeResolver.findModuleByRoute(bug.getPageUrl());
+            var flow = module != null ? sourceCodeResolver.findFlowByRoute(module, bug.getPageUrl()) : null;
+            String moduleName = module != null ? module.getName() : null;
+            List<String> primaryFiles = new ArrayList<>(sourceFiles.keySet());
+
+            String prompt = promptBuilder.buildE2EBugFixPrompt(
+                    bug, codeContext, pageRoute, moduleName, primaryFiles);
+            log.info("Work Item #{} prompt 已組裝（{} chars），模組：{}，路由：{}",
+                    workItemId, prompt.length(), moduleName, pageRoute);
 
             // 步驟 3：用 Opus 產生修復方案
             String aiResponse = claudeApiService.analyzeComplex(prompt).block();

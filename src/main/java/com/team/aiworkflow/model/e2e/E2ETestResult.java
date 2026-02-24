@@ -67,6 +67,7 @@ public class E2ETestResult {
         private String consoleErrors;    // Console 錯誤訊息
         private String expectedBehavior; // 預期行為
         private String actualBehavior;   // 實際行為
+        private String suggestedFix;     // AI 建議的修復方向（來自 Bug 分析階段）
         private int workItemId;          // 建立的 Azure DevOps Work Item ID
         private String attachmentUrl;    // Azure DevOps 截圖附件 URL
 

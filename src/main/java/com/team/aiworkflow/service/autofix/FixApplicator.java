@@ -33,7 +33,13 @@ public class FixApplicator {
     public FixResult parseFixResponse(String aiResponse) {
         try {
             String json = extractJson(aiResponse);
-            Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<>() {});
+            // 容錯：AI 有時回傳非標準 JSON（unquoted keys），用寬鬆模式解析
+            ObjectMapper lenient = objectMapper.copy()
+                    .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true)
+                    .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES, true)
+                    .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_COMMENTS, true)
+                    .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_TRAILING_COMMA, true);
+            Map<String, Object> parsed = lenient.readValue(json, new TypeReference<>() {});
 
             String fixDescription = (String) parsed.getOrDefault("fixDescription", "");
             String explanation = (String) parsed.getOrDefault("explanation", "");

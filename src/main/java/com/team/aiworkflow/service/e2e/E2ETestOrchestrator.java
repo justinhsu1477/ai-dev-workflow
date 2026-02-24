@@ -540,6 +540,7 @@ public class E2ETestOrchestrator {
                 .consoleErrors(consoleErrors)
                 .expectedBehavior(analysis.summary)
                 .actualBehavior(analysis.technicalDetail)
+                .suggestedFix(analysis.suggestedFix)
                 .build();
 
         result.getBugsFound().add(bug);

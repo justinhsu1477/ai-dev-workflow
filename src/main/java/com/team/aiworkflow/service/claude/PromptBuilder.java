@@ -10,6 +10,7 @@ import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -75,22 +76,53 @@ public class PromptBuilder {
         return template
                 .replace("{{BUG_DESCRIPTION}}", bugDescription != null ? bugDescription : "")
                 .replace("{{CODE_CONTEXT}}", codeContext != null ? codeContext : "")
-                .replace("{{STACK_TRACE}}", stackTrace != null ? stackTrace : "No stack trace");
+                .replace("{{STACK_TRACE}}", stackTrace != null ? stackTrace : "No stack trace")
+                // 新增 placeholder 的 fallback（pipeline failure 路徑不帶這些資訊）
+                .replace("{{PAGE_ROUTE}}", "N/A")
+                .replace("{{MODULE_NAME}}", "N/A")
+                .replace("{{PRIMARY_FILES}}", "N/A")
+                .replace("{{TEST_EVIDENCE}}", "N/A")
+                .replace("{{SUGGESTED_FIX}}", "N/A");
     }
 
     /**
      * 從 E2E 測試發現的 Bug 建立修復 prompt。
-     * 提取 bug 的各項資訊，組裝成 bug description，再呼叫 buildBugFixPrompt。
+     * 提取 bug 的各項資訊，組裝成 bug description，填入 E2E 專屬上下文。
      */
     public String buildE2EBugFixPrompt(E2ETestResult.BugFound bug, String codeContext) {
+        return buildE2EBugFixPrompt(bug, codeContext, null, null, null);
+    }
+
+    /**
+     * 從 E2E 測試發現的 Bug 建立修復 prompt（含路由和模組資訊）。
+     */
+    public String buildE2EBugFixPrompt(E2ETestResult.BugFound bug, String codeContext,
+                                        String pageRoute, String moduleName, List<String> primaryFiles) {
+        String template = templates.getOrDefault("bug-fix", getDefaultBugFixTemplate());
+
+        // Bug Description
         StringBuilder bugDesc = new StringBuilder();
         bugDesc.append("## Page URL\n").append(bug.getPageUrl() != null ? bug.getPageUrl() : "N/A").append("\n\n");
         bugDesc.append("## Expected Behavior\n").append(bug.getExpectedBehavior() != null ? bug.getExpectedBehavior() : "N/A").append("\n\n");
         bugDesc.append("## Actual Behavior\n").append(bug.getActualBehavior() != null ? bug.getActualBehavior() : "N/A").append("\n\n");
         bugDesc.append("## Bug Description\n").append(bug.getDescription() != null ? bug.getDescription() : "N/A").append("\n");
 
-        String consoleErrors = bug.getConsoleErrors();
-        return buildBugFixPrompt(bugDesc.toString(), codeContext, consoleErrors);
+        // Test Evidence（E2E 測試步驟摘要）
+        String testEvidence = "Bug severity: " + (bug.getSeverity() != null ? bug.getSeverity() : "UNKNOWN")
+                + "\nStep #" + bug.getStepNumber() + " detected the failure.";
+
+        // Suggested Fix（來自 AI Bug 分析階段的修復建議）
+        String suggestedFix = bug.getSuggestedFix() != null ? bug.getSuggestedFix() : "N/A";
+
+        return template
+                .replace("{{BUG_DESCRIPTION}}", bugDesc.toString())
+                .replace("{{CODE_CONTEXT}}", codeContext != null ? codeContext : "")
+                .replace("{{STACK_TRACE}}", bug.getConsoleErrors() != null ? bug.getConsoleErrors() : "No console errors")
+                .replace("{{PAGE_ROUTE}}", pageRoute != null ? pageRoute : "N/A")
+                .replace("{{MODULE_NAME}}", moduleName != null ? moduleName : "N/A")
+                .replace("{{PRIMARY_FILES}}", primaryFiles != null ? String.join(", ", primaryFiles) : "N/A")
+                .replace("{{TEST_EVIDENCE}}", testEvidence)
+                .replace("{{SUGGESTED_FIX}}", suggestedFix);
     }
 
     private String getDefaultFailureAnalysisTemplate() {
