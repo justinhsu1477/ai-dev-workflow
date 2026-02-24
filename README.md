@@ -165,6 +165,32 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev
 
 ### 3. 手動觸發 E2E 測試
 
+有兩種模式：**Scoped（推薦）** 和 **Unscoped**。
+
+#### Scoped 模式（推薦）
+
+根據指定的檔案變動，自動比對 `e2e-module-mapping.yml` 找到受影響的模組和測試流程。
+登入由程式碼處理，AI 只負責規劃該模組的測試步驟，精準度高。
+
+```bash
+# 指定變動的檔案，系統自動判定要測哪些模組
+curl -X POST http://localhost:8081/webhook/push/manual \
+  -H "Content-Type: application/json" \
+  -d '{
+    "changedFiles": [
+      "src/main/java/com/soetek/ods/views/order/d2/components/D2GridComponent.java"
+    ],
+    "branch": "ai-dev-workflow"
+  }'
+```
+
+> **流程**：changedFiles → git diff 比對模組 → 登入 → AI 規劃步驟 → Playwright 執行
+> → 失敗時 AI 分析 Bug → 建 Work Item（附截圖）→ AI 自動修復 → 建 PR → Teams 通知
+
+#### Unscoped 模式
+
+AI 自行判斷整個 app 的測試範圍，包含登入。適合部署後全面冒煙測試。
+
 ```bash
 # 非同步執行
 curl -X POST http://localhost:8081/api/e2e/run \
@@ -176,6 +202,16 @@ curl -X POST http://localhost:8081/api/e2e/run-sync \
   -H "Content-Type: application/json" \
   -d '{"appUrl":"http://localhost:8080","appDescription":"OCDS 訂單系統","maxSteps":20}'
 ```
+
+#### 兩種模式比較
+
+| | Scoped（推薦） | Unscoped |
+|---|---|---|
+| **觸發** | `POST /webhook/push/manual` | `POST /api/e2e/run-sync` |
+| **登入** | 程式碼自動處理 | AI 自行判斷（容易失敗） |
+| **測試範圍** | 依 changedFiles 精準定位模組 | AI 判斷整個 app |
+| **步驟數** | ~8 步（精準） | ~14 步（含登入，較不穩定） |
+| **Auto-Fix** | ✅ 已整合 | ✅ 已整合 |
 
 ### 4. AI 自動修復 Re-test
 
@@ -202,11 +238,12 @@ curl -X POST http://localhost:8081/api/e2e/autofix/retest/12345
 | Method | Path | 說明 |
 |--------|------|------|
 | POST | `/webhook/pipeline-failure` | 接收 CI 測試失敗 event |
-| POST | `/webhook/push` | 接收 git push event → 觸發 E2E |
+| POST | `/webhook/push` | 接收 git push event → 觸發 Scoped E2E |
+| POST | `/webhook/push/manual` | **手動觸發 Scoped E2E 測試（推薦）** |
 | POST | `/webhook/deployment` | 接收部署完成 event → 觸發 E2E |
-| POST | `/api/e2e/run` | 手動觸發 E2E 測試（非同步） |
-| POST | `/api/e2e/run-sync` | 手動觸發 E2E 測試（同步） |
-| POST | `/api/e2e/autofix/retest/{workItemId}` | 觸發 AI 修復驗證 |
+| POST | `/api/e2e/run` | 手動觸發 Unscoped E2E 測試（非同步） |
+| POST | `/api/e2e/run-sync` | 手動觸發 Unscoped E2E 測試（同步） |
+| POST | `/api/e2e/autofix/retest/{workItemId}` | 觸發 AI 修復驗證（Re-test） |
 | POST | `/api/analyze-failure` | 手動觸發 CI 失敗分析 |
 
 ## 設定說明
