@@ -192,15 +192,23 @@ public class PushWebhookController {
         // 解析測試範圍（傳入 changedFiles 做 flow-level 精準匹配）
         TestScope scope = testScopeResolver.resolveScope(affectedModules, changedFiles);
 
+        // 記錄 Push 事件（工程師績效追蹤）
+        String manualPushId = "manual-" + System.currentTimeMillis();
+        String branch = request.getBranch() != null ? request.getBranch() : "unknown";
+        engineerStatsRecorder.recordPush(
+                "Manual Tester", "manual@local",
+                manualPushId, branch, allowedRepository, changedFiles.size());
+
         // 建立測試請求
         E2ETestRequest testRequest = E2ETestRequest.builder()
                 .appUrl(stagingUrl)
                 .appDescription(buildScopedDescription(scope))
                 .buildNumber("manual")
-                .branch(request.getBranch() != null ? request.getBranch() : "unknown")
+                .branch(branch)
                 .maxSteps(maxSteps)
                 .timeoutSeconds(timeoutSeconds)
                 .triggeredBy("manual-push")
+                .pushId(manualPushId)
                 .build();
 
         orchestrator.runScopedTestAsync(testRequest, scope);
